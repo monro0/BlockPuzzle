@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Block Puzzle</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Подключаем SDK Telegram Web App -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+
+    <div id="game-container">
+        <header id="header">
+            <h1 id="welcome-message">Block Puzzle</h1>
+            <div id="score-container">
+                <div>Score: <span id="score">0</span></div>
+                <div>High Score: <span id="high-score">0</span></div>
+            </div>
+        </header>
+
+        <div id="game-board"></div>
+
+        <div id="pieces-container">
+            <!-- Сюда будут добавляться фигуры для выбора -->
+        </div>
+
+        <div id="controls-container">
+            <button id="rotate-btn">Повернуть</button>
+            <button id="restart-btn">Рестарт</button>
+        </div>
+
+        <div id="game-over-screen" class="hidden">
+            <h2>Игра окончена</h2>
+            <p>Ваш счет: <span id="final-score">0</span></p>
+            <button id="share-btn">Поделиться результатом</button>
+        </div>
+    </div>
+
+    <script src="game.js"></script>
+
+</body>
+</html>
