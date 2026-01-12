@@ -22,7 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let selectedPiece = null;
     let draggedPiece = null;
     let isAnimating = false;
-    let touchClone = null; // <<-- Для мобильного перетаскивания
+    let touchClone = null;
     let score = 0;
     let highScore = localStorage.getItem('blockPuzzleHighScore') || 0;
     let tg = null;
@@ -325,7 +325,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.appendChild(touchClone);
         const touch = e.touches[0];
         touchClone.style.left = `${touch.clientX - touchClone.offsetWidth / 2}px`;
-        touchClone.style.top = `${touch.clientY - touchClone.offsetHeight / 2}px`;
+        touchClone.style.top = `${touch.clientY - touchClone.offsetHeight / 2 - 80}px`; // <<-- ГЛАВНОЕ ИЗМЕНЕНИЕ: Смещаем фигуру вверх
         pieceDiv.classList.add('dragging');
     }, { passive: false });
 
@@ -334,7 +334,7 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
         const touch = e.touches[0];
         touchClone.style.left = `${touch.clientX - touchClone.offsetWidth / 2}px`;
-        touchClone.style.top = `${touch.clientY - touchClone.offsetHeight / 2}px`;
+        touchClone.style.top = `${touch.clientY - touchClone.offsetHeight / 2 - 80}px`; // <<-- ГЛАВНОЕ ИЗМЕНЕНИЕ: Смещаем фигуру вверх
         const elementUnderTouch = document.elementFromPoint(touch.clientX, touch.clientY);
         const cell = elementUnderTouch ? elementUnderTouch.closest('.cell') : null;
         if (cell) {
