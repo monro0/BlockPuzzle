@@ -21,9 +21,10 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentPieces = [];
     let selectedPiece = null;
     let draggedPiece = null;
+    let isAnimating = false;
+    let touchClone = null; // <<-- Для мобильного перетаскивания
     let score = 0;
     let highScore = localStorage.getItem('blockPuzzleHighScore') || 0;
-    let isAnimating = false; // <<-- ИСПРАВЛЕНИЕ: Флаг для блокировки
     let tg = null;
 
     // --- Инициализация Telegram Web App ---
@@ -117,11 +118,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function generateRandomPiece() {
         const shapeKeys = Object.keys(SHAPES);
         const randomShapeKey = shapeKeys[Math.floor(Math.random() * shapeKeys.length)];
-        return {
-            id: Date.now() + Math.random(),
-            shape: SHAPES[randomShapeKey],
-            color: PIECE_COLORS[Math.floor(Math.random() * PIECE_COLORS.length)],
-        };
+        return { id: Date.now() + Math.random(), shape: SHAPES[randomShapeKey], color: PIECE_COLORS[Math.floor(Math.random() * PIECE_COLORS.length)], };
     }
     
     function canPlace(piece, startRow, startCol) {
@@ -198,24 +195,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const rect = cell.getBoundingClientRect();
         const particleCount = 8;
         let colorClass = '';
-        for (const c of cell.classList) {
-            if (c.startsWith('color-')) {
-                colorClass = c;
-                break;
-            }
-        }
+        for (const c of cell.classList) { if (c.startsWith('color-')) { colorClass = c; break; } }
         for (let i = 0; i < particleCount; i++) {
             const particle = document.createElement('div');
             particle.classList.add('sand-particle', colorClass);
             particle.style.left = `${rect.left + rect.width / 2}px`;
             particle.style.top = `${rect.top + rect.height / 2}px`;
             document.body.appendChild(particle);
-            const angle = Math.random() * Math.PI * 2;
-            const radius = Math.random() * 25;
-            const finalX = Math.cos(angle) * radius;
-            const finalY = Math.random() * 60 + 20;
-            const finalScale = 0.1;
-            const finalRotation = Math.random() * 360;
+            const angle = Math.random() * Math.PI * 2, radius = Math.random() * 25, finalX = Math.cos(angle) * radius, finalY = Math.random() * 60 + 20, finalScale = 0.1, finalRotation = Math.random() * 360;
             requestAnimationFrame(() => {
                 particle.style.transform = `translate(${finalX}px, ${finalY}px) scale(${finalScale}) rotate(${finalRotation}deg)`;
                 particle.style.opacity = '0';
@@ -226,48 +213,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function checkAndClearLines() {
         if (isAnimating) return;
-        const rowsToClear = new Set();
-        const colsToClear = new Set();
+        const rowsToClear = new Set(), colsToClear = new Set();
         for (let r = 0; r < BOARD_SIZE; r++) { if (board[r].every(cell => cell !== 0)) rowsToClear.add(r); }
         for (let c = 0; c < BOARD_SIZE; c++) { if (board.every(row => row[c] !== 0)) colsToClear.add(c); }
-
         const linesCleared = rowsToClear.size + colsToClear.size;
-        if (linesCleared === 0) {
-             // <<-- ИСПРАВЛЕНИЕ: Если линии не очищаются, все равно проверяем конец игры
-            if (checkGameOver()) {
-                handleGameOver();
-            }
-            return;
-        }
-
-        isAnimating = true; // <<-- ИСПРАВЛЕНИЕ: Блокируем игру
+        if (linesCleared === 0) { if (checkGameOver()) handleGameOver(); return; }
+        isAnimating = true;
         const cellsToAnimate = new Set();
-        rowsToClear.forEach(r => {
-            for (let c = 0; c < BOARD_SIZE; c++) cellsToAnimate.add(document.querySelector(`[data-row='${r}'][data-col='${c}']`));
-        });
-        colsToClear.forEach(c => {
-            for (let r = 0; r < BOARD_SIZE; r++) cellsToAnimate.add(document.querySelector(`[data-row='${r}'][data-col='${c}']`));
-        });
-
-        cellsToAnimate.forEach(cell => {
-            if (cell) {
-                createSandEffect(cell);
-                cell.style.visibility = 'hidden';
-            }
-        });
-
+        rowsToClear.forEach(r => { for (let c = 0; c < BOARD_SIZE; c++) cellsToAnimate.add(document.querySelector(`[data-row='${r}'][data-col='${c}']`)); });
+        colsToClear.forEach(c => { for (let r = 0; r < BOARD_SIZE; r++) cellsToAnimate.add(document.querySelector(`[data-row='${r}'][data-col='${c}']`)); });
+        cellsToAnimate.forEach(cell => { if (cell) { createSandEffect(cell); cell.style.visibility = 'hidden'; } });
         setTimeout(() => {
             rowsToClear.forEach(r => { for (let c = 0; c < BOARD_SIZE; c++) board[r][c] = 0; });
             colsToClear.forEach(c => { for (let r = 0; r < BOARD_SIZE; r++) board[r][c] = 0; });
             updateScore(linesCleared);
             drawBoard();
-            
-            // <<-- ИСПРАВЛЕНИЕ: Проверяем конец игры ПОСЛЕ анимации
-            if (checkGameOver()) {
-                handleGameOver();
-            }
-            isAnimating = false; // <<-- ИСПРАВЛЕНИЕ: Разблокируем игру
-        }, 800); // Увеличиваем время до конца анимации частиц
+            if (checkGameOver()) handleGameOver();
+            isAnimating = false;
+        }, 800);
     }
 
     function clearGhost() {
@@ -283,8 +246,7 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let r = 0; r < piece.shape.length; r++) {
             for (let c = 0; c < piece.shape[r].length; c++) {
                 if (piece.shape[r][c]) {
-                    const boardRow = startRow + r;
-                    const boardCol = startCol + c;
+                    const boardRow = startRow + r, boardCol = startCol + c;
                     if (boardRow < BOARD_SIZE && boardCol < BOARD_SIZE && boardRow >= 0 && boardCol >= 0) {
                         const cell = document.querySelector(`[data-row='${boardRow}'][data-col='${boardCol}']`);
                         if (cell) cell.classList.add(ghostClass);
@@ -294,7 +256,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    // --- Обработчики событий с проверкой на 'isAnimating' ---
+    // --- Управление мышкой (Drag & Drop) ---
     piecesContainer.addEventListener('dragstart', (e) => {
         if (isAnimating) { e.preventDefault(); return; }
         const pieceDiv = e.target.closest('.piece-preview');
@@ -305,46 +267,34 @@ document.addEventListener('DOMContentLoaded', () => {
         e.dataTransfer.effectAllowed = 'move';
         setTimeout(() => pieceDiv.classList.add('dragging'), 0);
     });
-    
     piecesContainer.addEventListener('dragend', (e) => {
         if (isAnimating) return;
         e.target.classList.remove('dragging');
         clearGhost();
         draggedPiece = null;
     });
-
     boardElement.addEventListener('dragover', (e) => {
         if (isAnimating) return;
         e.preventDefault();
         const cell = e.target.closest('.cell');
         if (cell && draggedPiece) {
-            let row = parseInt(cell.dataset.row);
-            let col = parseInt(cell.dataset.col);
-            const pieceHeight = draggedPiece.shape.length;
-            const pieceWidth = draggedPiece.shape[0].length;
+            let row = parseInt(cell.dataset.row), col = parseInt(cell.dataset.col), pieceHeight = draggedPiece.shape.length, pieceWidth = draggedPiece.shape[0].length;
             if (col + pieceWidth > BOARD_SIZE) col = BOARD_SIZE - pieceWidth;
             if (row + pieceHeight > BOARD_SIZE) row = BOARD_SIZE - pieceHeight;
             showGhost(draggedPiece, row, col);
         }
     });
-
     boardElement.addEventListener('dragleave', (e) => {
         if (isAnimating) return;
-        if (!e.relatedTarget || !boardElement.contains(e.relatedTarget)) {
-             clearGhost();
-        }
+        if (!e.relatedTarget || !boardElement.contains(e.relatedTarget)) clearGhost();
     });
-
     boardElement.addEventListener('drop', (e) => {
         if (isAnimating) return;
         e.preventDefault();
         clearGhost();
         const cell = e.target.closest('.cell');
         if (cell && draggedPiece) {
-            let row = parseInt(cell.dataset.row);
-            let col = parseInt(cell.dataset.col);
-            const pieceHeight = draggedPiece.shape.length;
-            const pieceWidth = draggedPiece.shape[0].length;
+            let row = parseInt(cell.dataset.row), col = parseInt(cell.dataset.col), pieceHeight = draggedPiece.shape.length, pieceWidth = draggedPiece.shape[0].length;
             if (col + pieceWidth > BOARD_SIZE) col = BOARD_SIZE - pieceWidth;
             if (row + pieceHeight > BOARD_SIZE) row = BOARD_SIZE - pieceHeight;
             if (placePiece(draggedPiece, row, col)) {
@@ -354,11 +304,76 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (currentPieces.every(p => p === null)) generateNewPieces();
                 drawBoard();
                 drawCurrentPieces();
-                checkAndClearLines(); // Эта функция теперь главная и управляет всем остальным
+                checkAndClearLines();
             }
         }
     });
 
+    // --- Управление касанием (Touch Events) ---
+    piecesContainer.addEventListener('touchstart', (e) => {
+        if (isAnimating) return;
+        e.preventDefault();
+        const pieceDiv = e.target.closest('.piece-preview');
+        if (!pieceDiv) return;
+        const pieceId = parseFloat(pieceDiv.dataset.pieceId);
+        draggedPiece = currentPieces.find(p => p && p.id === pieceId);
+        if (!draggedPiece) return;
+        touchClone = pieceDiv.cloneNode(true);
+        touchClone.style.position = 'absolute';
+        touchClone.style.zIndex = '1000';
+        touchClone.style.pointerEvents = 'none';
+        document.body.appendChild(touchClone);
+        const touch = e.touches[0];
+        touchClone.style.left = `${touch.clientX - touchClone.offsetWidth / 2}px`;
+        touchClone.style.top = `${touch.clientY - touchClone.offsetHeight / 2}px`;
+        pieceDiv.classList.add('dragging');
+    }, { passive: false });
+
+    document.body.addEventListener('touchmove', (e) => {
+        if (isAnimating || !draggedPiece || !touchClone) return;
+        e.preventDefault();
+        const touch = e.touches[0];
+        touchClone.style.left = `${touch.clientX - touchClone.offsetWidth / 2}px`;
+        touchClone.style.top = `${touch.clientY - touchClone.offsetHeight / 2}px`;
+        const elementUnderTouch = document.elementFromPoint(touch.clientX, touch.clientY);
+        const cell = elementUnderTouch ? elementUnderTouch.closest('.cell') : null;
+        if (cell) {
+            let row = parseInt(cell.dataset.row), col = parseInt(cell.dataset.col), pieceHeight = draggedPiece.shape.length, pieceWidth = draggedPiece.shape[0].length;
+            if (col + pieceWidth > BOARD_SIZE) col = BOARD_SIZE - pieceWidth;
+            if (row + pieceHeight > BOARD_SIZE) row = BOARD_SIZE - pieceHeight;
+            showGhost(draggedPiece, row, col);
+        } else {
+            clearGhost();
+        }
+    }, { passive: false });
+
+    document.body.addEventListener('touchend', (e) => {
+        if (isAnimating || !draggedPiece || !touchClone) return;
+        const touch = e.changedTouches[0];
+        const elementUnderTouch = document.elementFromPoint(touch.clientX, touch.clientY);
+        const cell = elementUnderTouch ? elementUnderTouch.closest('.cell') : null;
+        clearGhost();
+        touchClone.remove();
+        touchClone = null;
+        document.querySelector('.piece-preview.dragging')?.classList.remove('dragging');
+        if (cell) {
+            let row = parseInt(cell.dataset.row), col = parseInt(cell.dataset.col), pieceHeight = draggedPiece.shape.length, pieceWidth = draggedPiece.shape[0].length;
+            if (col + pieceWidth > BOARD_SIZE) col = BOARD_SIZE - pieceWidth;
+            if (row + pieceHeight > BOARD_SIZE) row = BOARD_SIZE - pieceHeight;
+            if (placePiece(draggedPiece, row, col)) {
+                const pieceIndex = currentPieces.findIndex(p => p && p.id === draggedPiece.id);
+                if (pieceIndex > -1) currentPieces[pieceIndex] = null;
+                if (selectedPiece && selectedPiece.id === draggedPiece.id) selectedPiece = null;
+                if (currentPieces.every(p => p === null)) generateNewPieces();
+                drawBoard();
+                drawCurrentPieces();
+                checkAndClearLines();
+            }
+        }
+        draggedPiece = null;
+    });
+
+    // --- Кнопки и выбор ---
     piecesContainer.addEventListener('click', (e) => {
         if (isAnimating) return;
         const pieceDiv = e.target.closest('.piece-preview');
@@ -374,7 +389,6 @@ document.addEventListener('DOMContentLoaded', () => {
             rotatePiece(selectedPiece);
         }
     });
-
     document.getElementById('restart-btn').addEventListener('click', initGame);
     document.getElementById('share-btn').addEventListener('click', () => {
         if (tg) {
