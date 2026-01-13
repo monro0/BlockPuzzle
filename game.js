@@ -1,5 +1,3 @@
-// --- НАЧАЛО КОДА ---
-
 document.addEventListener('DOMContentLoaded', () => {
     // --- DOM Элементы ---
     const boardElement = document.getElementById('game-board');
@@ -11,14 +9,31 @@ document.addEventListener('DOMContentLoaded', () => {
     const welcomeMessage = document.getElementById('welcome-message');
 
     // --- Константы и состояние игры ---
-    const BOARD_SIZE = 10;
+    const BOARD_SIZE = 8;
     const PIECE_COLORS = ['color-1', 'color-2', 'color-3', 'color-4', 'color-5'];
+    
+    // <<-- ИЗМЕНЕНИЕ: Полностью новый набор фигур
     const SHAPES = {
-        'I': [[1, 1, 1, 1]], 'O': [[1, 1], [1, 1]], 'T': [[0, 1, 0], [1, 1, 1]],
-        'L': [[1, 0], [1, 0], [1, 1]], 'J': [[0, 1], [0, 1], [1, 1]], 'S': [[0, 1, 1], [1, 1, 0]],
-        'Z': [[1, 1, 0], [0, 1, 1]], 'dot': [[1]], 'corner': [[1, 1], [1, 0]], 'small_L': [[1, 0], [1, 1]]
+        // Добавленные и измененные по вашему запросу
+        'I5_hor':    [[1, 1, 1, 1, 1]],
+        'I5_ver':    [[1], [1], [1], [1], [1]],
+        'I3_hor':    [[1, 1, 1]],
+        'I3_ver':    [[1], [1], [1]],
+        'I2_hor':    [[1, 1]],
+        'I2_ver':    [[1], [1]],
+
+        // Оставшиеся из старого набора
+        'square3x3': [[1, 1, 1], [1, 1, 1], [1, 1, 1]],
+        'I4_hor':    [[1, 1, 1, 1]],
+        'O':         [[1, 1], [1, 1]],
+        'L':         [[1, 0], [1, 0], [1, 1]],
+        'J':         [[0, 1], [0, 1], [1, 1]],
+        'T':         [[0, 1, 0], [1, 1, 1]],
+        'dot':       [[1]],
+        'corner':    [[1, 1], [1, 0]],
+        'U_shape':   [[1, 0, 1], [1, 1, 1]]
     };
-    const TOUCH_OFFSET_Y = -80; // Константа для смещения фигуры над пальцем
+    const TOUCH_OFFSET_Y = -80;
 
     let board = [];
     let currentPieces = [];
@@ -50,13 +65,66 @@ document.addEventListener('DOMContentLoaded', () => {
     function generateNewPieces() { currentPieces = []; for (let i = 0; i < 3; i++) { currentPieces.push(generateRandomPiece()); } selectedPiece = null; if (checkGameOver()) handleGameOver(); }
     function generateRandomPiece() { const shapeKeys = Object.keys(SHAPES); const randomShapeKey = shapeKeys[Math.floor(Math.random() * shapeKeys.length)]; return { id: Date.now() + Math.random(), shape: SHAPES[randomShapeKey], color: PIECE_COLORS[Math.floor(Math.random() * PIECE_COLORS.length)], }; }
     function canPlace(piece, startRow, startCol) { if (!piece) return false; for (let r = 0; r < piece.shape.length; r++) { for (let c = 0; c < piece.shape[r].length; c++) { if (piece.shape[r][c]) { const boardRow = startRow + r; const boardCol = startCol + c; if (boardRow >= BOARD_SIZE || boardCol >= BOARD_SIZE || boardRow < 0 || boardCol < 0 || board[boardRow][boardCol]) { return false; } } } } return true; }
-    function placePiece(piece, startRow, startCol) { if (!canPlace(piece, startRow, startCol)) return false; for (let r = 0; r < piece.shape.length; r++) { for (let c = 0; c < piece.shape[r].length; c++) { if (piece.shape[r][c]) { board[startRow + r][startCol + c] = piece.color; } } } return true; }
-    function updateScore(linesCleared) { const points = (linesCleared * 100) * linesCleared; score += points; scoreElement.textContent = score; if (score > highScore) { highScore = score; highScoreElement.textContent = highScore; localStorage.setItem('blockPuzzleHighScore', highScore); } }
+
+    function placePiece(piece, startRow, startCol) {
+        if (!canPlace(piece, startRow, startCol)) return false;
+        
+        let blockCount = 0; // <<-- ИЗМЕНЕНИЕ: Считаем блоки
+        for (let r = 0; r < piece.shape.length; r++) {
+            for (let c = 0; c < piece.shape[r].length; c++) {
+                if (piece.shape[r][c]) {
+                    board[startRow + r][startCol + c] = piece.color;
+                    blockCount++;
+                }
+            }
+        }
+        addScore(blockCount); // <<-- ИЗМЕНЕНИЕ: Добавляем очки за количество блоков
+        return true;
+    }
+    
+    function addScore(points) { // <<-- ИЗМЕНЕНИЕ: Централизованная функция для очков
+        score += points;
+        scoreElement.textContent = score;
+        if (score > highScore) {
+            highScore = score;
+            highScoreElement.textContent = highScore;
+            localStorage.setItem('blockPuzzleHighScore', highScore);
+        }
+    }
+
     function rotatePiece(piece) { if (!piece) return; const shape = piece.shape; const newShape = Array.from({ length: shape[0].length }, () => Array(shape.length).fill(0)); for (let r = 0; r < shape.length; r++) { for (let c = 0; c < shape[0].length; c++) { newShape[c][shape.length - 1 - r] = shape[r][c]; } } piece.shape = newShape; drawCurrentPieces(); }
     function checkGameOver() { for (const piece of currentPieces) { if (!piece) continue; for (let r = 0; r <= BOARD_SIZE - piece.shape.length; r++) { for (let c = 0; c <= BOARD_SIZE - piece.shape[0].length; c++) { if (canPlace(piece, r, c)) return false; } } } return true; }
     function handleGameOver() { isAnimating = false; finalScoreElement.textContent = score; gameOverScreen.classList.remove('hidden'); }
     function createSandEffect(cell) { const rect = cell.getBoundingClientRect(); const particleCount = 8; let colorClass = ''; for (const c of cell.classList) { if (c.startsWith('color-')) { colorClass = c; break; } } for (let i = 0; i < particleCount; i++) { const particle = document.createElement('div'); particle.classList.add('sand-particle', colorClass); particle.style.left = `${rect.left + rect.width / 2}px`; particle.style.top = `${rect.top + rect.height / 2}px`; document.body.appendChild(particle); const angle = Math.random() * Math.PI * 2, radius = Math.random() * 25, finalX = Math.cos(angle) * radius, finalY = Math.random() * 60 + 20, finalScale = 0.1, finalRotation = Math.random() * 360; requestAnimationFrame(() => { particle.style.transform = `translate(${finalX}px, ${finalY}px) scale(${finalScale}) rotate(${finalRotation}deg)`; particle.style.opacity = '0'; }); setTimeout(() => particle.remove(), 800); } }
-    function checkAndClearLines() { if (isAnimating) return; const rowsToClear = new Set(), colsToClear = new Set(); for (let r = 0; r < BOARD_SIZE; r++) { if (board[r].every(cell => cell !== 0)) rowsToClear.add(r); } for (let c = 0; c < BOARD_SIZE; c++) { if (board.every(row => row[c] !== 0)) colsToClear.add(c); } const linesCleared = rowsToClear.size + colsToClear.size; if (linesCleared === 0) { if (checkGameOver()) handleGameOver(); return; } isAnimating = true; const cellsToAnimate = new Set(); rowsToClear.forEach(r => { for (let c = 0; c < BOARD_SIZE; c++) cellsToAnimate.add(document.querySelector(`[data-row='${r}'][data-col='${c}']`)); }); colsToClear.forEach(c => { for (let r = 0; r < BOARD_SIZE; r++) cellsToAnimate.add(document.querySelector(`[data-row='${r}'][data-col='${c}']`)); }); cellsToAnimate.forEach(cell => { if (cell) { createSandEffect(cell); cell.style.visibility = 'hidden'; } }); setTimeout(() => { rowsToClear.forEach(r => { for (let c = 0; c < BOARD_SIZE; c++) board[r][c] = 0; }); colsToClear.forEach(c => { for (let r = 0; r < BOARD_SIZE; r++) board[r][c] = 0; }); updateScore(linesCleared); drawBoard(); if (checkGameOver()) handleGameOver(); isAnimating = false; }, 800); }
+    
+    function checkAndClearLines() { 
+        if (isAnimating) return; 
+        const rowsToClear = new Set(), colsToClear = new Set(); 
+        for (let r = 0; r < BOARD_SIZE; r++) { if (board[r].every(cell => cell !== 0)) rowsToClear.add(r); } 
+        for (let c = 0; c < BOARD_SIZE; c++) { if (board.every(row => row[c] !== 0)) colsToClear.add(c); } 
+        
+        const linesCleared = rowsToClear.size + colsToClear.size; 
+        if (linesCleared === 0) { if (checkGameOver()) handleGameOver(); return; } 
+
+        // <<-- ИЗМЕНЕНИЕ: Новая логика расчета бонусных очков
+        const bonusPoints = (linesCleared * (linesCleared + 1) / 2) * 10;
+        addScore(bonusPoints);
+        
+        isAnimating = true; 
+        const cellsToAnimate = new Set(); 
+        rowsToClear.forEach(r => { for (let c = 0; c < BOARD_SIZE; c++) cellsToAnimate.add(document.querySelector(`[data-row='${r}'][data-col='${c}']`)); }); 
+        colsToClear.forEach(c => { for (let r = 0; r < BOARD_SIZE; r++) cellsToAnimate.add(document.querySelector(`[data-row='${r}'][data-col='${c}']`)); }); 
+        cellsToAnimate.forEach(cell => { if (cell) { createSandEffect(cell); cell.style.visibility = 'hidden'; } }); 
+        
+        setTimeout(() => { 
+            rowsToClear.forEach(r => { for (let c = 0; c < BOARD_SIZE; c++) board[r][c] = 0; }); 
+            colsToClear.forEach(c => { for (let r = 0; r < BOARD_SIZE; r++) board[r][c] = 0; }); 
+            drawBoard(); 
+            if (checkGameOver()) handleGameOver(); 
+            isAnimating = false; 
+        }, 800); 
+    }
+
     function clearGhost() { if (isAnimating) return; document.querySelectorAll('.cell').forEach(cell => cell.classList.remove('ghost', 'ghost-invalid')); }
     function showGhost(piece, startRow, startCol) { if (isAnimating) return; clearGhost(); const isValid = canPlace(piece, startRow, startCol); const ghostClass = isValid ? 'ghost' : 'ghost-invalid'; for (let r = 0; r < piece.shape.length; r++) { for (let c = 0; c < piece.shape[r].length; c++) { if (piece.shape[r][c]) { const boardRow = startRow + r, boardCol = startCol + c; if (boardRow < BOARD_SIZE && boardCol < BOARD_SIZE && boardRow >= 0 && boardCol >= 0) { const cell = document.querySelector(`[data-row='${boardRow}'][data-col='${boardCol}']`); if (cell) cell.classList.add(ghostClass); } } } } }
     
@@ -84,5 +152,3 @@ document.addEventListener('DOMContentLoaded', () => {
 
     initGame();
 });
-
-// --- КОНЕЦ КОДА ---
