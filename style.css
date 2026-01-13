@@ -3,7 +3,8 @@
     --grid-line-color: #0f3460;
     --text-color: #e0e0e0;
     --accent-color: #16c79a;
-    --cell-size: min(8vw, 40px); /* Адаптивный размер клетки */
+    /* Изменили размер ячейки для поля 8x8 */
+    --cell-size: min(10vw, 50px); 
 }
 
 body {
@@ -16,7 +17,7 @@ body {
     height: 100vh;
     margin: 0;
     overflow: hidden;
-    touch-action: none; /* Отключаем стандартные жесты браузера */
+    touch-action: none;
 }
 
 #game-container {
@@ -50,8 +51,9 @@ body {
 
 #game-board {
     display: grid;
-    grid-template-columns: repeat(10, var(--cell-size));
-    grid-template-rows: repeat(10, var(--cell-size));
+    /* ГЛАВНОЕ ИЗМЕНЕНИЕ: Сетка теперь 8x8 */
+    grid-template-columns: repeat(8, var(--cell-size));
+    grid-template-rows: repeat(8, var(--cell-size));
     gap: 3px;
     background-color: #000;
     padding: 5px;
@@ -84,7 +86,6 @@ body {
     filter: brightness(1.5);
 }
 
-/* Цвета фигур */
 .color-1 { background-color: #ff3c78; box-shadow: 0 0 8px #ff3c78; }
 .color-2 { background-color: #36fde1; box-shadow: 0 0 8px #36fde1; }
 .color-3 { background-color: #f7b801; box-shadow: 0 0 8px #f7b801; }
@@ -125,7 +126,6 @@ body {
     display: none !important;
 }
 
-/* --- Стили для Drag & Drop --- */
 .ghost {
     background-color: rgba(255, 255, 255, 0.3) !important;
     border: 1px dashed #fff;
@@ -142,7 +142,6 @@ body {
     opacity: 0.5;
 }
 
-/* --- Стили для эффекта песка --- */
 .sand-particle {
     position: absolute;
     width: 6px;
