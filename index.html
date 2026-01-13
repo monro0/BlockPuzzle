@@ -3,40 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Block Puzzle</title>
+    <title>Block Puzzle Gems</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
 
     <div id="game-container">
+        <!-- <<-- ИЗМЕНЕНИЕ: Вся шапка перестроена -->
         <header id="header">
-            <h1 id="welcome-message">Block Puzzle</h1>
-            <div id="score-container">
-                <div>Score: <span id="score">0</span></div>
-                <div>High Score: <span id="high-score">0</span></div>
+            <div id="score-wrapper">
+                <div class="score-box">
+                    <span class="score-label">СЧЕТ</span>
+                    <span id="score">0</span>
+                </div>
+                <div class="score-box">
+                    <span class="score-label">РЕКОРД</span>
+                    <span id="high-score">0</span>
+                </div>
             </div>
+            <button id="new-game-btn" class="control-btn" title="Новая игра">🔄</button>
         </header>
 
-        <div id="game-board"></div>
-
-        <div id="pieces-container">
-            <!-- Сюда будут добавляться фигуры для выбора -->
+        <div id="game-board-container">
+            <div id="game-board"></div>
         </div>
 
-        <div id="controls-container">
-            <!-- Кнопка "Повернуть" удалена -->
-            <button id="restart-btn">Рестарт</button>
-        </div>
+        <div id="pieces-container"></div>
+
+        <!-- Контейнер для кнопок внизу больше не нужен -->
+        <!-- <div id="controls-container"></div> -->
 
         <div id="game-over-screen" class="hidden">
             <h2>Игра окончена</h2>
             <p>Ваш счет: <span id="final-score">0</span></p>
-            <button id="share-btn">Поделиться результатом</button>
+            <button id="restart-from-gameover-btn">Начать новую игру</button>
         </div>
     </div>
 
     <script src="game.js"></script>
-
 </body>
 </html>
