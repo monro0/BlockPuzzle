@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Block Puzzle Gems</title>
+    <!-- <<-- ИЗМЕНЕНИЕ: Все подключения к Google Fonts удалены -->
+    <link rel="stylesheet" href="style.css">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+
+    <div id="game-container">
+        <header id="header">
+            <div id="score-wrapper">
+                <div class="score-box">
+                    <span class="score-label">СЧЕТ</span>
+                    <span id="score">0</span>
+                </div>
+                <div class="score-box">
+                    <span class="score-label">РЕКОРД</span>
+                    <span id="high-score">0</span>
+                </div>
+            </div>
+            <button id="new-game-btn" class="control-btn" title="Новая игра">🔄</button>
+        </header>
+
+        <div id="game-board-container">
+            <div id="game-board"></div>
+        </div>
+
+        <div id="pieces-container"></div>
+
+        <div id="game-over-screen" class="hidden">
+            <h2>Игра окончена</h2>
+            <p>Ваш счет: <span id="final-score">0</span></p>
+            <button id="restart-from-gameover-btn">Начать новую игру</button>
+        </div>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>
