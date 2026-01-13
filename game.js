@@ -1,457 +1,65 @@
-const boardElement = document.getElementById('game-board');
-const piecesContainer = document.getElementById('pieces-container');
-const scoreElement = document.getElementById('score-value');
-const highScoreElement = document.getElementById('highscore-value');
-const gameOverScreen = document.getElementById('game-over-screen');
-const finalScoreElement = document.getElementById('final-score');
-const restartButton = document.getElementById('restart-button');
+document.addEventListener('DOMContentLoaded', () => {
+    // --- DOM Элементы ---
+    const boardElement = document.getElementById('game-board');
+    const piecesContainer = document.getElementById('pieces-container');
+    const scoreElement = document.getElementById('score');
+    const highScoreElement = document.getElementById('high-score');
+    const gameOverScreen = document.getElementById('game-over-screen');
+    const finalScoreElement = document.getElementById('final-score');
+    const restartFromGameOverBtn = document.getElementById('restart-from-gameover-btn');
+    const newGameBtn = document.getElementById('new-game-btn');
+    
+    // --- Константы ---
+    const BOARD_SIZE = 8;
+    const PIECE_COLORS = ['color-1', 'color-2', 'color-3', 'color-4', 'color-5'];
+    const PREVIEW_BLOCK_SIZE = 28;
+    const SHAPES = { 'I5_hor': [[1, 1, 1, 1, 1]], 'I5_ver': [[1], [1], [1], [1], [1]], 'I3_hor': [[1, 1, 1]], 'I3_ver': [[1], [1], [1]], 'I2_hor': [[1, 1]], 'I2_ver': [[1], [1]], 'square3x3': [[1, 1, 1], [1, 1, 1], [1, 1, 1]], 'I4_hor': [[1, 1, 1, 1]], 'O': [[1, 1], [1, 1]], 'L': [[1, 0], [1, 0], [1, 1]], 'J': [[0, 1], [0, 1], [1, 1]], 'T': [[0, 1, 0], [1, 1, 1]], 'dot': [[1]], 'corner': [[1, 1], [1, 0]], 'U_shape': [[1, 0, 1], [1, 1, 1]] };
+    const TOUCH_OFFSET_Y = -80;
+    const HIGH_SCORE_KEY = 'blockPuzzleHighScore_v2';
+    const ACTIVE_GAME_KEY = 'blockPuzzleActiveGame_v2';
 
-const BOARD_WIDTH = 10;
-const BOARD_HEIGHT = 10;
-const HIGH_SCORE_KEY = 'blockPuzzleHighScore';
-const ACTIVE_GAME_KEY = 'blockPuzzleActiveGame';
+    // --- Переменные состояния ---
+    let board = [], currentPieces = [], draggedPiece = null, isAnimating = false, touchClone = null, score = 0, highScore = 0;
+    let tg = null;
 
-let board = [];
-let currentPieces = [];
-let score = 0;
-let highScore = 0;
+    // --- Инициализация ---
+    try { tg = window.Telegram.WebApp; tg.ready(); tg.expand(); } catch (e) { console.log("Не в среде Telegram."); }
 
-// --- Optimized Drag & Performance State ---
-let activeDrag = { pieceIndex: null, pieceData: null };
-let lastHoveredCell = null;
-let currentGhostCells = [];
+    function saveGameState() { const gameState = { board, currentPieces, score }; localStorage.setItem(ACTIVE_GAME_KEY, JSON.stringify(gameState)); }
+    function loadGameState() { const savedGame = localStorage.getItem(ACTIVE_GAME_KEY); if (savedGame) { const gameState = JSON.parse(savedGame); board = gameState.board; currentPieces = gameState.currentPieces; score = gameState.score; scoreElement.textContent = score; return true; } return false; }
+    function deleteGameState() { localStorage.removeItem(ACTIVE_GAME_KEY); }
 
-const pieces = [
-    { shape: [[1, 1], [1, 1]], color: '#ffd83b', id: 'O' }, // O
-    { shape: [[1, 1, 1, 1]], color: '#42e3ff', id: 'I' },      // I
-    { shape: [[0, 1, 0], [1, 1, 1]], color: '#b554ff', id: 'T' }, // T
-    { shape: [[1, 0, 0], [1, 1, 1]], color: '#ff8d2b', id: 'L' }, // L
-    { shape: [[0, 0, 1], [1, 1, 1]], color: '#2b80ff', id: 'J' }, // J
-    { shape: [[0, 1, 1], [1, 1, 0]], color: '#ff5454', id: 'S' }, // S
-    { shape: [[1, 1, 0], [0, 1, 1]], color: '#79ff2b', id: 'Z' }, // Z
-    { shape: [[1]], color: '#ff2bca' }, // 1x1
-    { shape: [[1, 1, 1]], color: '#42e3ff' }, // 1x3
-    { shape: [[1], [1], [1]], color: '#ff8d2b' }, // 3x1
-];
+    function initGame(forceNew = false) { highScore = localStorage.getItem(HIGH_SCORE_KEY) || 0; highScoreElement.textContent = highScore; createBoard(); if (!forceNew && loadGameState()) { updateBoard(); drawCurrentPieces(); } else { isAnimating = false; board = Array.from({ length: BOARD_SIZE }, () => Array(BOARD_SIZE).fill(0)); score = 0; scoreElement.textContent = score; gameOverScreen.classList.add('hidden'); currentPieces = []; generateNewPieces(); updateBoard(); drawCurrentPieces(); saveGameState(); } }
+    function createBoard() { boardElement.innerHTML = ''; for (let r = 0; r < BOARD_SIZE; r++) { for (let c = 0; c < BOARD_SIZE; c++) { const cell = document.createElement('div'); cell.dataset.row = r; cell.dataset.col = c; boardElement.appendChild(cell); } } }
+    function updateBoard() { for (let r = 0; r < BOARD_SIZE; r++) { for (let c = 0; c < BOARD_SIZE; c++) { const cell = boardElement.children[r * BOARD_SIZE + c]; const colorClass = board[r][c]; cell.className = 'cell'; if (colorClass) { cell.classList.add(colorClass); } } } }
+    function drawCurrentPieces() { piecesContainer.innerHTML = ''; currentPieces.forEach(piece => { if (!piece) return; const pieceDiv = document.createElement('div'); pieceDiv.classList.add('piece-preview'); pieceDiv.dataset.pieceId = piece.id; pieceDiv.draggable = true; const grid = document.createElement('div'); grid.style.display = 'grid'; grid.style.gridTemplateColumns = `repeat(${piece.shape[0].length}, ${PREVIEW_BLOCK_SIZE}px)`; grid.style.pointerEvents = 'none'; for (let r = 0; r < piece.shape.length; r++) { for (let c = 0; c < piece.shape[r].length; c++) { const block = document.createElement('div'); block.classList.add('preview-block', 'cell'); if (piece.shape[r][c]) { block.classList.add(piece.color); } grid.appendChild(block); } } pieceDiv.appendChild(grid); piecesContainer.appendChild(pieceDiv); }); updatePlaceableStatus(); }
+    function generateNewPieces() { currentPieces = []; for (let i = 0; i < 3; i++) { currentPieces.push(generateRandomPiece()); } updatePlaceableStatus(); if (checkGameOver()) { handleGameOver(); } }
+    function generateRandomPiece() { const shapeKeys = Object.keys(SHAPES); const randomShapeKey = shapeKeys[Math.floor(Math.random() * shapeKeys.length)]; return { id: Date.now() + Math.random(), shape: SHAPES[randomShapeKey], color: PIECE_COLORS[Math.floor(Math.random() * PIECE_COLORS.length)], }; }
+    function canPlace(piece, startRow, startCol) { if (!piece) return false; for (let r = 0; r < piece.shape.length; r++) { for (let c = 0; c < piece.shape[r].length; c++) { if (piece.shape[r][c]) { const boardRow = startRow + r; const boardCol = startCol + c; if (boardRow >= BOARD_SIZE || boardCol >= BOARD_SIZE || boardRow < 0 || boardCol < 0 || board[boardRow][boardCol]) { return false; } } } } return true; }
+    function placePiece(piece, startRow, startCol) { if (!canPlace(piece, startRow, startCol)) return false; let blockCount = 0; for (let r = 0; r < piece.shape.length; r++) { for (let c = 0; c < piece.shape[r].length; c++) { if (piece.shape[r][c]) { board[startRow + r][startCol + c] = piece.color; blockCount++; } } } addScore(blockCount); return true; }
+    function addScore(points) { score += points; scoreElement.textContent = score; }
+    function isPiecePlaceable(piece) { if (!piece) return false; for (let r = 0; r <= BOARD_SIZE - piece.shape.length; r++) { for (let c = 0; c <= BOARD_SIZE - piece.shape[0].length; c++) { if (canPlace(piece, r, c)) return true; } } return false; }
+    function updatePlaceableStatus() { document.querySelectorAll('.piece-preview').forEach(div => { if(!div.dataset.pieceId) return; const pieceId = parseFloat(div.dataset.pieceId); const pieceData = currentPieces.find(p => p && p.id === pieceId); const placeable = isPiecePlaceable(pieceData); div.classList.toggle('unplaceable', !placeable); div.draggable = placeable; }); }
+    function checkGameOver() { return currentPieces.every(p => p === null || !isPiecePlaceable(p)); }
+    function handleGameOver() { isAnimating = false; finalScoreElement.textContent = score; gameOverScreen.classList.remove('hidden'); if (score > highScore) { highScore = score; localStorage.setItem(HIGH_SCORE_KEY, highScore); } deleteGameState(); console.log("Игра окончена. Счет:", score); }
+    function createSandEffect(cell) { const rect = cell.getBoundingClientRect(); const particleCount = 8; let colorClass = ''; for (const c of cell.classList) { if (c.startsWith('color-')) { colorClass = c; break; } } for (let i = 0; i < particleCount; i++) { const particle = document.createElement('div'); particle.classList.add('sand-particle', colorClass); particle.style.left = `${rect.left + rect.width / 2}px`; particle.style.top = `${rect.top + rect.height / 2}px`; document.body.appendChild(particle); const angle = Math.random() * Math.PI * 2, radius = Math.random() * 25, finalX = Math.cos(angle) * radius, finalY = Math.random() * 60 + 20, finalScale = 0.1, finalRotation = Math.random() * 360; requestAnimationFrame(() => { particle.style.transform = `translate(${finalX}px, ${finalY}px) scale(${finalScale}) rotate(${finalRotation}deg)`; particle.style.opacity = '0'; }); setTimeout(() => particle.remove(), 800); } }
+    function processTurn() { if (isAnimating) return; const rowsToClear = new Set(), colsToClear = new Set(); for (let r = 0; r < BOARD_SIZE; r++) { if (board[r].every(cell => cell !== 0)) rowsToClear.add(r); } for (let c = 0; c < BOARD_SIZE; c++) { if (board.every(row => row[c] !== 0)) colsToClear.add(c); } const linesCleared = rowsToClear.size + colsToClear.size; if (linesCleared > 0) { const bonusPoints = (linesCleared * (linesCleared + 1) / 2) * 10; addScore(bonusPoints); isAnimating = true; const cellsToAnimate = new Set(); rowsToClear.forEach(r => { for (let c = 0; c < BOARD_SIZE; c++) cellsToAnimate.add(document.querySelector(`[data-row='${r}'][data-col='${c}']`)); }); colsToClear.forEach(c => { for (let r = 0; r < BOARD_SIZE; r++) cellsToAnimate.add(document.querySelector(`[data-row='${r}'][data-col='${c}']`)); }); cellsToAnimate.forEach(cell => { if (cell) { createSandEffect(cell); board[cell.dataset.row][cell.dataset.col] = 0; } }); updateBoard(); setTimeout(() => { updatePlaceableStatus(); if (checkGameOver()) handleGameOver(); isAnimating = false; }, 100); } else { updatePlaceableStatus(); if (checkGameOver()) handleGameOver(); } saveGameState(); }
+    function clearGhost() { if (isAnimating) return; document.querySelectorAll('.cell').forEach(cell => cell.classList.remove('ghost', 'ghost-invalid')); }
+    function showGhost(piece, startRow, startCol) { if (!piece) return; if (isAnimating) return; clearGhost(); const isValid = canPlace(piece, startRow, startCol); const ghostClass = isValid ? 'ghost' : 'ghost-invalid'; for (let r = 0; r < piece.shape.length; r++) { for (let c = 0; c < piece.shape[r].length; c++) { if (piece.shape[r][c]) { const boardRow = startRow + r, boardCol = startCol + c; if (boardRow < BOARD_SIZE && boardCol < BOARD_SIZE && boardRow >= 0 && boardCol >= 0) { const cell = document.querySelector(`[data-row='${boardRow}'][data-col='${boardCol}']`); if (cell) cell.classList.add(ghostClass); } } } } }
+    function getPlacementPosition(targetElement, piece) { if (!targetElement || !piece) return null; const cell = targetElement.closest('.cell'); if (!cell) return null; let baseRow = parseInt(cell.dataset.row); let baseCol = parseInt(cell.dataset.col); const rowOffset = Math.floor(piece.shape.length / 2); const colOffset = Math.floor(piece.shape[0].length / 2); let finalRow = baseRow - rowOffset; let finalCol = baseCol - colOffset; if (finalCol < 0) finalCol = 0; if (finalRow < 0) finalRow = 0; if (finalCol + piece.shape[0].length > BOARD_SIZE) finalCol = BOARD_SIZE - piece.shape[0].length; if (finalRow + piece.shape.length > BOARD_SIZE) finalRow = BOARD_SIZE - piece.shape.length; return { row: finalRow, col: finalCol }; }
+    function handleDrop(targetElement) { if (isAnimating || !draggedPiece) return; clearGhost(); const pos = getPlacementPosition(targetElement, draggedPiece); if (pos && placePiece(draggedPiece, pos.row, pos.col)) { const pieceIndex = currentPieces.findIndex(p => p && p.id === draggedPiece.id); if (pieceIndex > -1) currentPieces[pieceIndex] = null; if (currentPieces.every(p => p === null)) { generateNewPieces(); } updateBoard(); drawCurrentPieces(); processTurn(); } }
+    function handleMove(targetElement) { if (isAnimating || !draggedPiece) return; const pos = getPlacementPosition(targetElement, draggedPiece); if (pos) { showGhost(draggedPiece, pos.row, pos.col); } else { clearGhost(); } }
+    piecesContainer.addEventListener('dragstart', (e) => { if (isAnimating || e.target.classList.contains('unplaceable')) { e.preventDefault(); return; } const pieceDiv = e.target.closest('.piece-preview'); if (!pieceDiv) return; const pieceId = parseFloat(pieceDiv.dataset.pieceId); draggedPiece = currentPieces.find(p => p && p.id === pieceId); e.dataTransfer.setData('text/plain', pieceId); e.dataTransfer.effectAllowed = 'move'; setTimeout(() => pieceDiv.classList.add('dragging'), 0); });
+    piecesContainer.addEventListener('dragend', (e) => { if (isAnimating) return; e.target.classList.remove('dragging'); clearGhost(); draggedPiece = null; });
+    boardElement.addEventListener('dragover', (e) => { e.preventDefault(); handleMove(e.target); });
+    boardElement.addEventListener('dragleave', (e) => { if (!e.relatedTarget || !boardElement.contains(e.relatedTarget)) clearGhost(); });
+    boardElement.addEventListener('drop', (e) => { e.preventDefault(); handleDrop(e.target); });
+    piecesContainer.addEventListener('touchstart', (e) => { const pieceDiv = e.target.closest('.piece-preview'); if (isAnimating || !pieceDiv || pieceDiv.classList.contains('unplaceable')) { return; } e.preventDefault(); const pieceId = parseFloat(pieceDiv.dataset.pieceId); draggedPiece = currentPieces.find(p => p && p.id === pieceId); if (!draggedPiece) return; touchClone = pieceDiv.cloneNode(true); touchClone.style.position = 'absolute'; touchClone.style.zIndex = '1000'; touchClone.style.pointerEvents = 'none'; document.body.appendChild(touchClone); const touch = e.touches[0]; touchClone.style.left = `${touch.clientX - touchClone.offsetWidth / 2}px`; touchClone.style.top = `${touch.clientY - touchClone.offsetHeight / 2 + TOUCH_OFFSET_Y}px`; pieceDiv.classList.add('dragging'); }, { passive: false });
+    document.body.addEventListener('touchmove', (e) => { if (isAnimating || !draggedPiece || !touchClone) return; e.preventDefault(); const touch = e.touches[0]; touchClone.style.left = `${touch.clientX - touchClone.offsetWidth / 2}px`; touchClone.style.top = `${touch.clientY - touchClone.offsetHeight / 2 + TOUCH_OFFSET_Y}px`; const elementUnderTouch = document.elementFromPoint(touch.clientX, touch.clientY + TOUCH_OFFSET_Y); handleMove(elementUnderTouch); }, { passive: false });
+    document.body.addEventListener('touchend', (e) => { if (isAnimating || !draggedPiece || !touchClone) return; const touch = e.changedTouches[0]; const elementUnderTouch = document.elementFromPoint(touch.clientX, touch.clientY + TOUCH_OFFSET_Y); handleDrop(elementUnderTouch); touchClone.remove(); touchClone = null; document.querySelector('.piece-preview.dragging')?.classList.remove('dragging'); draggedPiece = null; });
+    
+    if (newGameBtn) { newGameBtn.addEventListener('click', () => { if (confirm("Вы уверены, что хотите начать новую игру? Текущий прогресс будет потерян.")) { deleteGameState(); initGame(true); } }); }
+    if (restartFromGameOverBtn) { restartFromGameOverBtn.addEventListener('click', () => { gameOverScreen.classList.add('hidden'); initGame(true); }); }
 
-function initGame(isRestart = false) {
-    boardElement.innerHTML = '';
-    piecesContainer.innerHTML = '';
-    gameOverScreen.style.display = 'none';
-
-    highScore = localStorage.getItem(HIGH_SCORE_KEY) || 0;
-    highScoreElement.textContent = highScore;
-
-    if (!isRestart && loadGameState()) {
-        console.log("Loaded saved game state.");
-    } else {
-        board = Array.from({ length: BOARD_HEIGHT }, () => Array(BOARD_WIDTH).fill(null));
-        score = 0;
-        scoreElement.textContent = score;
-        generateNewPieces();
-    }
-
-    clearGhost();
-    drawBoard();
-    updatePiecesUI();
-}
-
-function drawBoard() {
-    boardElement.innerHTML = '';
-    board.forEach((row, r) => {
-        row.forEach((cell, c) => {
-            const cellElement = document.createElement('div');
-            cellElement.classList.add('cell');
-            if (cell) {
-                cellElement.classList.add('filled');
-                cellElement.style.backgroundColor = cell.color;
-                cellElement.dataset.gemType = cell.id || 'gem';
-            }
-            cellElement.dataset.row = r;
-            cellElement.dataset.col = c;
-            boardElement.appendChild(cellElement);
-        });
-    });
-}
-
-function generateNewPieces() {
-    currentPieces = [];
-    for (let i = 0; i < 3; i++) {
-        const piece = pieces[Math.floor(Math.random() * pieces.length)];
-        currentPieces.push({ ...piece, used: false });
-    }
-}
-
-function updatePiecesUI() {
-    piecesContainer.innerHTML = '';
-    currentPieces.forEach((piece, index) => {
-        if (!piece.used) {
-            const pieceElement = createPieceElement(piece, index);
-            piecesContainer.appendChild(pieceElement);
-        }
-    });
-}
-
-function createPieceElement(piece, pieceIndex) {
-    const pieceElement = document.createElement('div');
-    pieceElement.classList.add('piece');
-    pieceElement.draggable = true;
-
-    piece.shape.forEach(row => {
-        const rowElement = document.createElement('div');
-        rowElement.classList.add('piece-row');
-        row.forEach(cell => {
-            const cellElement = document.createElement('div');
-            cellElement.classList.add('piece-cell');
-            if (cell) {
-                cellElement.style.backgroundColor = piece.color;
-                cellElement.dataset.gemType = piece.id || 'gem';
-            }
-            rowElement.appendChild(cellElement);
-        });
-        pieceElement.appendChild(rowElement);
-    });
-
-    // --- Drag and Drop for Desktop ---
-    pieceElement.addEventListener('dragstart', (e) => {
-        if (pieceElement.classList.contains('used')) {
-            e.preventDefault();
-            return;
-        }
-        activeDrag.pieceIndex = pieceIndex;
-        activeDrag.pieceData = currentPieces[pieceIndex];
-        setTimeout(() => {
-            pieceElement.classList.add('dragging');
-        }, 0);
-    });
-
-    pieceElement.addEventListener('dragend', () => {
-        pieceElement.classList.remove('dragging');
-        clearGhost();
-        activeDrag = { pieceIndex: null, pieceData: null };
-        lastHoveredCell = null;
-    });
-
-    // --- Touch events for Mobile ---
-    pieceElement.addEventListener('touchstart', (e) => {
-        if (pieceElement.classList.contains('used')) return;
-        e.preventDefault();
-
-        activeDrag.pieceIndex = pieceIndex;
-        activeDrag.pieceData = currentPieces[pieceIndex];
-
-        const originalPieceRect = pieceElement.getBoundingClientRect();
-        const touchClone = pieceElement.cloneNode(true);
-        touchClone.id = 'touch-clone';
-        touchClone.style.position = 'absolute';
-        touchClone.style.width = `${originalPieceRect.width}px`;
-        touchClone.style.height = `${originalPieceRect.height}px`;
-        touchClone.style.pointerEvents = 'none';
-        touchClone.classList.add('dragging');
-        document.body.appendChild(touchClone);
-
-        const touch = e.touches[0];
-        const touchOffsetY = touchClone.offsetHeight * 1.5;
-
-        const updateClonePosition = (currentTouch) => {
-            touchClone.style.top = `${currentTouch.clientY - touchOffsetY}px`;
-            touchClone.style.left = `${currentTouch.clientX - (touchClone.offsetWidth / 2)}px`;
-        }
-
-        updateClonePosition(touch);
-
-        const onTouchMove = (moveEvent) => {
-            moveEvent.preventDefault();
-            const moveTouch = moveEvent.touches[0];
-            updateClonePosition(moveTouch);
-
-            const elementFromPoint = document.elementFromPoint(moveTouch.clientX, moveTouch.clientY);
-            if (elementFromPoint && elementFromPoint !== lastHoveredCell && elementFromPoint.classList.contains('cell')) {
-                handleMove(elementFromPoint);
-                lastHoveredCell = elementFromPoint;
-            }
-        };
-
-        const onTouchEnd = (endEvent) => {
-            if (touchClone) {
-                document.body.removeChild(touchClone);
-            }
-
-            const endTouch = endEvent.changedTouches[0];
-            const elementFromPoint = document.elementFromPoint(endTouch.clientX, endTouch.clientY);
-
-            if (elementFromPoint && elementFromPoint.classList.contains('cell')) {
-                handleDrop(elementFromPoint);
-            } else {
-                clearGhost();
-            }
-
-            // Cleanup
-            activeDrag = { pieceIndex: null, pieceData: null };
-            lastHoveredCell = null;
-            document.body.removeEventListener('touchmove', onTouchMove);
-            document.body.removeEventListener('touchend', onTouchEnd);
-        };
-
-        document.body.addEventListener('touchmove', onTouchMove, { passive: false });
-        document.body.addEventListener('touchend', onTouchEnd);
-
-    }, { passive: false });
-
-    return pieceElement;
-}
-
-function getPlacementPosition(piece, row, col) {
-    if (!piece) return null;
-    const pieceHeight = piece.shape.length;
-    const pieceWidth = piece.shape[0].length;
-
-    let finalRow = row - Math.floor(pieceHeight / 2);
-    let finalCol = col - Math.floor(pieceWidth / 2);
-
-    finalRow = Math.max(0, Math.min(finalRow, BOARD_HEIGHT - pieceHeight));
-    finalCol = Math.max(0, Math.min(finalCol, BOARD_WIDTH - pieceWidth));
-
-    return { row: finalRow, col: finalCol };
-}
-
-function canPlace(piece, startRow, startCol) {
-    if (!piece) return false;
-    for (let r = 0; r < piece.shape.length; r++) {
-        for (let c = 0; c < piece.shape[r].length; c++) {
-            if (piece.shape[r][c]) {
-                const boardRow = startRow + r;
-                const boardCol = startCol + c;
-                if (boardRow >= BOARD_HEIGHT || boardCol >= BOARD_WIDTH || board[boardRow][boardCol]) {
-                    return false;
-                }
-            }
-        }
-    }
-    return true;
-}
-
-function clearGhost() {
-    currentGhostCells.forEach(cell => {
-        if (cell) cell.classList.remove('ghost');
-    });
-    currentGhostCells = [];
-}
-
-function showGhost(piece, row, col) {
-    clearGhost();
-    const placementPosition = getPlacementPosition(piece, row, col);
-    if (!placementPosition) return;
-
-    if (canPlace(piece, placementPosition.row, placementPosition.col)) {
-        piece.shape.forEach((shapeRow, r_offset) => {
-            shapeRow.forEach((cell, c_offset) => {
-                if (cell) {
-                    const boardRow = placementPosition.row + r_offset;
-                    const boardCol = placementPosition.col + c_offset;
-                    const targetCell = document.querySelector(`.cell[data-row='${boardRow}'][data-col='${boardCol}']`);
-                    if (targetCell) {
-                        targetCell.classList.add('ghost');
-                        currentGhostCells.push(targetCell);
-                    }
-                }
-            });
-        });
-    }
-}
-
-function handleMove(targetCell) {
-    if (!activeDrag.pieceData) return;
-    if (!targetCell || !targetCell.classList.contains('cell')) {
-        clearGhost();
-        return;
-    }
-
-    const row = parseInt(targetCell.dataset.row);
-    const col = parseInt(targetCell.dataset.col);
-    showGhost(activeDrag.pieceData, row, col);
-}
-
-function handleDrop(targetCell) {
-    const pieceIndex = activeDrag.pieceIndex;
-    if (pieceIndex === null) return;
-
-    const draggedPiece = currentPieces[pieceIndex];
-    const row = parseInt(targetCell.dataset.row);
-    const col = parseInt(targetCell.dataset.col);
-
-    const placementPosition = getPlacementPosition(draggedPiece, row, col);
-    if (placementPosition && canPlace(draggedPiece, placementPosition.row, placementPosition.col)) {
-        placePiece(draggedPiece, placementPosition.row, placementPosition.col);
-        currentPieces[pieceIndex].used = true;
-        updatePiecesUI();
-        clearLines();
-        if (currentPieces.every(p => p.used)) {
-            generateNewPieces();
-            updatePiecesUI();
-        }
-        saveGameState();
-        if (checkGameOver()) {
-            handleGameOver();
-        }
-    }
-    clearGhost();
-}
-
-function placePiece(piece, startRow, startCol) {
-    let placedBlockCount = 0;
-    piece.shape.forEach((row, r) => {
-        row.forEach((cell, c) => {
-            if (cell) {
-                const boardRow = startRow + r;
-                const boardCol = startCol + c;
-                if (boardRow < BOARD_HEIGHT && boardCol < BOARD_WIDTH) {
-                    board[boardRow][boardCol] = { color: piece.color, id: piece.id };
-                    placedBlockCount++;
-                }
-            }
-        });
-    });
-    score += placedBlockCount;
-    scoreElement.textContent = score;
-    drawBoard();
-}
-
-function clearLines() {
-    let linesToClear = [];
-    // Check rows
-    for (let r = 0; r < BOARD_HEIGHT; r++) {
-        if (board[r].every(cell => cell !== null)) {
-            linesToClear.push({type: 'row', index: r});
-        }
-    }
-    // Check columns
-    for (let c = 0; c < BOARD_WIDTH; c++) {
-        if (board.every(row => row[c] !== null)) {
-             linesToClear.push({type: 'col', index: c});
-        }
-    }
-
-    if (linesToClear.length > 0) {
-        score += linesToClear.length * 10 * linesToClear.length; // Combo bonus
-        scoreElement.textContent = score;
-        animateLineClear(linesToClear);
-    }
-}
-
-function animateLineClear(lines) {
-    lines.forEach(line => {
-        if(line.type === 'row') {
-            for(let c = 0; c < BOARD_WIDTH; c++) {
-                const cell = document.querySelector(`.cell[data-row='${line.index}'][data-col='${c}']`);
-                cell.classList.add('clearing');
-            }
-        } else { // col
-            for(let r = 0; r < BOARD_HEIGHT; r++) {
-                const cell = document.querySelector(`.cell[data-row='${r}'][data-col='${line.index}']`);
-                cell.classList.add('clearing');
-            }
-        }
-    });
-
-    setTimeout(() => {
-        lines.forEach(line => {
-            if (line.type === 'row') {
-                for (let c = 0; c < BOARD_WIDTH; c++) board[line.index][c] = null;
-            } else { // col
-                for (let r = 0; r < BOARD_HEIGHT; r++) board[r][line.index] = null;
-            }
-        });
-        drawBoard();
-        saveGameState();
-    }, 200);
-}
-
-function checkGameOver() {
-    for (const piece of currentPieces) {
-        if (!piece.used) {
-            for (let r = 0; r <= BOARD_HEIGHT - piece.shape.length; r++) {
-                for (let c = 0; c <= BOARD_WIDTH - piece.shape[0].length; c++) {
-                    if (canPlace(piece, r, c)) {
-                        return false; // At least one move is possible
-                    }
-                }
-            }
-        }
-    }
-    return true; // No moves left for any available piece
-}
-
-function handleGameOver() {
-    finalScoreElement.textContent = score;
-    if (score > highScore) {
-        highScore = score;
-        localStorage.setItem(HIGH_SCORE_KEY, highScore);
-        highScoreElement.textContent = highScore;
-    }
-    gameOverScreen.style.display = 'flex';
-    deleteGameState();
-}
-
-function saveGameState() {
-    const gameState = {
-        board: board,
-        currentPieces: currentPieces,
-        score: score
-    };
-    localStorage.setItem(ACTIVE_GAME_KEY, JSON.stringify(gameState));
-}
-
-function loadGameState() {
-    const savedGame = localStorage.getItem(ACTIVE_GAME_KEY);
-    if (savedGame) {
-        try {
-            const gameState = JSON.parse(savedGame);
-            board = gameState.board;
-            currentPieces = gameState.currentPieces;
-            score = gameState.score;
-            scoreElement.textContent = score;
-            return true;
-        } catch (e) {
-            console.error("Could not parse saved game state:", e);
-            deleteGameState();
-            return false;
-        }
-    }
-    return false;
-}
-
-function deleteGameState() {
-    localStorage.removeItem(ACTIVE_GAME_KEY);
-}
-
-// Event Listeners
-restartButton.addEventListener('click', () => initGame(true));
-
-boardElement.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    const targetCell = e.target;
-    if (targetCell && targetCell !== lastHoveredCell && targetCell.classList.contains('cell')) {
-        handleMove(targetCell);
-        lastHoveredCell = targetCell;
-    }
+    initGame();
 });
-
-boardElement.addEventListener('drop', (e) => {
-    e.preventDefault();
-    if (e.target.classList.contains('cell')) {
-        handleDrop(e.target);
-    }
-    clearGhost();
-    lastHoveredCell = null;
-});
-
-boardElement.addEventListener('dragleave', (e) => {
-    if (!boardElement.contains(e.relatedTarget)) {
-        clearGhost();
-        lastHoveredCell = null;
-    }
-});
-
-// Initialize
-initGame();
