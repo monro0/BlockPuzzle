@@ -6,12 +6,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const highScoreElement = document.getElementById('high-score');
     const gameOverScreen = document.getElementById('game-over-screen');
     const finalScoreElement = document.getElementById('final-score');
-    
+
     // --- Константы и состояние игры ---
     const BOARD_SIZE = 8;
     const PIECE_COLORS = ['color-1', 'color-2', 'color-3', 'color-4', 'color-5'];
-    const PREVIEW_BLOCK_SIZE = 28; // <<-- ИЗМЕНЕНИЕ: Увеличен размер для удобства
-    
+    const PREVIEW_BLOCK_SIZE = 28;
     const SHAPES = {
         'I5_hor':    [[1, 1, 1, 1, 1]], 'I5_ver':    [[1], [1], [1], [1], [1]],
         'I3_hor':    [[1, 1, 1]], 'I3_ver':    [[1], [1], [1]],
@@ -52,15 +51,39 @@ document.addEventListener('DOMContentLoaded', () => {
     function clearGhost() { if (isAnimating) return; document.querySelectorAll('.cell').forEach(cell => cell.classList.remove('ghost', 'ghost-invalid')); }
     function showGhost(piece, startRow, startCol) { if (isAnimating) return; clearGhost(); const isValid = canPlace(piece, startRow, startCol); const ghostClass = isValid ? 'ghost' : 'ghost-invalid'; for (let r = 0; r < piece.shape.length; r++) { for (let c = 0; c < piece.shape[r].length; c++) { if (piece.shape[r][c]) { const boardRow = startRow + r, boardCol = startCol + c; if (boardRow < BOARD_SIZE && boardCol < BOARD_SIZE && boardRow >= 0 && boardCol >= 0) { const cell = document.querySelector(`[data-row='${boardRow}'][data-col='${boardCol}']`); if (cell) cell.classList.add(ghostClass); } } } } }
     
+    // <<-- ИЗМЕНЕНИЕ: Общая функция для вычисления позиции
+    function getPlacementPosition(targetElement, piece) {
+        if (!targetElement) return null;
+        const cell = targetElement.closest('.cell');
+        if (!cell) return null;
+        
+        let baseRow = parseInt(cell.dataset.row);
+        let baseCol = parseInt(cell.dataset.col);
+
+        // Центрируем фигуру относительно целевой ячейки
+        const rowOffset = Math.floor(piece.shape.length / 2);
+        const colOffset = Math.floor(piece.shape[0].length / 2);
+        let finalRow = baseRow - rowOffset;
+        let finalCol = baseCol - colOffset;
+
+        // Проверка и корректировка границ
+        if (finalCol < 0) finalCol = 0;
+        if (finalRow < 0) finalRow = 0;
+        if (finalCol + piece.shape[0].length > BOARD_SIZE) finalCol = BOARD_SIZE - piece.shape[0].length;
+        if (finalRow + piece.shape.length > BOARD_SIZE) finalRow = BOARD_SIZE - piece.shape.length;
+
+        return { row: finalRow, col: finalCol };
+    }
+
     // --- Управление ---
     piecesContainer.addEventListener('dragstart', (e) => { if (isAnimating) { e.preventDefault(); return; } const pieceDiv = e.target.closest('.piece-preview'); if (!pieceDiv) return; const pieceId = parseFloat(pieceDiv.dataset.pieceId); draggedPiece = currentPieces.find(p => p && p.id === pieceId); e.dataTransfer.setData('text/plain', pieceId); e.dataTransfer.effectAllowed = 'move'; setTimeout(() => pieceDiv.classList.add('dragging'), 0); });
     piecesContainer.addEventListener('dragend', (e) => { if (isAnimating) return; e.target.classList.remove('dragging'); clearGhost(); draggedPiece = null; });
-    boardElement.addEventListener('dragover', (e) => { if (isAnimating) return; e.preventDefault(); const cell = e.target.closest('.cell'); if (cell && draggedPiece) { let row = parseInt(cell.dataset.row), col = parseInt(cell.dataset.col), pieceHeight = draggedPiece.shape.length, pieceWidth = draggedPiece.shape[0].length; if (col + pieceWidth > BOARD_SIZE) col = BOARD_SIZE - pieceWidth; if (row + pieceHeight > BOARD_SIZE) row = BOARD_SIZE - pieceHeight; showGhost(draggedPiece, row, col); } });
+    boardElement.addEventListener('dragover', (e) => { if (isAnimating) return; e.preventDefault(); const pos = getPlacementPosition(e.target, draggedPiece); if (pos) { showGhost(draggedPiece, pos.row, pos.col); } });
     boardElement.addEventListener('dragleave', (e) => { if (isAnimating) return; if (!e.relatedTarget || !boardElement.contains(e.relatedTarget)) clearGhost(); });
-    boardElement.addEventListener('drop', (e) => { if (isAnimating) return; e.preventDefault(); clearGhost(); const cell = e.target.closest('.cell'); if (cell && draggedPiece) { let row = parseInt(cell.dataset.row), col = parseInt(cell.dataset.col), pieceHeight = draggedPiece.shape.length, pieceWidth = draggedPiece.shape[0].length; if (col + pieceWidth > BOARD_SIZE) col = BOARD_SIZE - pieceWidth; if (row + pieceHeight > BOARD_SIZE) row = BOARD_SIZE - pieceHeight; if (placePiece(draggedPiece, row, col)) { const pieceIndex = currentPieces.findIndex(p => p && p.id === draggedPiece.id); if (pieceIndex > -1) currentPieces[pieceIndex] = null; if (currentPieces.every(p => p === null)) generateNewPieces(); drawBoard(); drawCurrentPieces(); checkAndClearLines(); } } });
+    boardElement.addEventListener('drop', (e) => { if (isAnimating) return; e.preventDefault(); clearGhost(); const pos = getPlacementPosition(e.target, draggedPiece); if (pos && placePiece(draggedPiece, pos.row, pos.col)) { const pieceIndex = currentPieces.findIndex(p => p && p.id === draggedPiece.id); if (pieceIndex > -1) currentPieces[pieceIndex] = null; if (currentPieces.every(p => p === null)) generateNewPieces(); drawBoard(); drawCurrentPieces(); checkAndClearLines(); } });
     piecesContainer.addEventListener('touchstart', (e) => { if (isAnimating) return; e.preventDefault(); const pieceDiv = e.target.closest('.piece-preview'); if (!pieceDiv) return; const pieceId = parseFloat(pieceDiv.dataset.pieceId); draggedPiece = currentPieces.find(p => p && p.id === pieceId); if (!draggedPiece) return; touchClone = pieceDiv.cloneNode(true); touchClone.style.position = 'absolute'; touchClone.style.zIndex = '1000'; touchClone.style.pointerEvents = 'none'; document.body.appendChild(touchClone); const touch = e.touches[0]; touchClone.style.left = `${touch.clientX - touchClone.offsetWidth / 2}px`; touchClone.style.top = `${touch.clientY - touchClone.offsetHeight / 2 + TOUCH_OFFSET_Y}px`; pieceDiv.classList.add('dragging'); }, { passive: false });
-    document.body.addEventListener('touchmove', (e) => { if (isAnimating || !draggedPiece || !touchClone) return; e.preventDefault(); const touch = e.touches[0]; touchClone.style.left = `${touch.clientX - touchClone.offsetWidth / 2}px`; touchClone.style.top = `${touch.clientY - touchClone.offsetHeight / 2 + TOUCH_OFFSET_Y}px`; const elementUnderTouch = document.elementFromPoint(touch.clientX, touch.clientY + TOUCH_OFFSET_Y); const cell = elementUnderTouch ? elementUnderTouch.closest('.cell') : null; if (cell) { let row = parseInt(cell.dataset.row), col = parseInt(cell.dataset.col), pieceHeight = draggedPiece.shape.length, pieceWidth = draggedPiece.shape[0].length; if (col + pieceWidth > BOARD_SIZE) col = BOARD_SIZE - pieceWidth; if (row + pieceHeight > BOARD_SIZE) row = BOARD_SIZE - pieceHeight; showGhost(draggedPiece, row, col); } else { clearGhost(); } }, { passive: false });
-    document.body.addEventListener('touchend', (e) => { if (isAnimating || !draggedPiece || !touchClone) return; const touch = e.changedTouches[0]; const elementUnderTouch = document.elementFromPoint(touch.clientX, touch.clientY + TOUCH_OFFSET_Y); const cell = elementUnderTouch ? elementUnderTouch.closest('.cell') : null; clearGhost(); touchClone.remove(); touchClone = null; document.querySelector('.piece-preview.dragging')?.classList.remove('dragging'); if (cell) { let row = parseInt(cell.dataset.row), col = parseInt(cell.dataset.col), pieceHeight = draggedPiece.shape.length, pieceWidth = draggedPiece.shape[0].length; if (col + pieceWidth > BOARD_SIZE) col = BOARD_SIZE - pieceWidth; if (row + pieceHeight > BOARD_SIZE) row = BOARD_SIZE - pieceHeight; if (placePiece(draggedPiece, row, col)) { const pieceIndex = currentPieces.findIndex(p => p && p.id === draggedPiece.id); if (pieceIndex > -1) currentPieces[pieceIndex] = null; if (currentPieces.every(p => p === null)) generateNewPieces(); drawBoard(); drawCurrentPieces(); checkAndClearLines(); } } draggedPiece = null; });
+    document.body.addEventListener('touchmove', (e) => { if (isAnimating || !draggedPiece || !touchClone) return; e.preventDefault(); const touch = e.touches[0]; touchClone.style.left = `${touch.clientX - touchClone.offsetWidth / 2}px`; touchClone.style.top = `${touch.clientY - touchClone.offsetHeight / 2 + TOUCH_OFFSET_Y}px`; const elementUnderTouch = document.elementFromPoint(touch.clientX, touch.clientY + TOUCH_OFFSET_Y); const pos = getPlacementPosition(elementUnderTouch, draggedPiece); if (pos) { showGhost(draggedPiece, pos.row, pos.col); } else { clearGhost(); } }, { passive: false });
+    document.body.addEventListener('touchend', (e) => { if (isAnimating || !draggedPiece || !touchClone) return; const touch = e.changedTouches[0]; const elementUnderTouch = document.elementFromPoint(touch.clientX, touch.clientY + TOUCH_OFFSET_Y); clearGhost(); touchClone.remove(); touchClone = null; document.querySelector('.piece-preview.dragging')?.classList.remove('dragging'); const pos = getPlacementPosition(elementUnderTouch, draggedPiece); if (pos && placePiece(draggedPiece, pos.row, pos.col)) { const pieceIndex = currentPieces.findIndex(p => p && p.id === draggedPiece.id); if (pieceIndex > -1) currentPieces[pieceIndex] = null; if (currentPieces.every(p => p === null)) generateNewPieces(); drawBoard(); drawCurrentPieces(); checkAndClearLines(); } draggedPiece = null; });
     
     // --- Кнопки ---
     document.getElementById('restart-btn').addEventListener('click', initGame);
