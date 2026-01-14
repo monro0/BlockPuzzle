@@ -8,7 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const finalScoreElement = document.getElementById('final-score');
     const restartFromGameOverBtn = document.getElementById('restart-from-gameover-btn');
     const newGameBtn = document.getElementById('new-game-btn');
-    
+
     // --- Константы ---
     const BOARD_SIZE = 8;
     const PIECE_COLORS = ['color-1', 'color-2', 'color-3', 'color-4', 'color-5'];
@@ -21,6 +21,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Переменные состояния ---
     let board = [], currentPieces = [], draggedPiece = null, isAnimating = false, touchClone = null, score = 0, highScore = 0;
     let tg = null;
+
+    // --- ПЕРЕМЕННЫЕ ДЛЯ ОПТИМИЗАЦИИ ---
+    let touchUpdateScheduled = false;
+    let lastTouchX = 0;
+    let lastTouchY = 0;
 
     // --- Инициализация ---
     try { tg = window.Telegram.WebApp; tg.ready(); tg.expand(); } catch (e) { console.log("Не в среде Telegram."); }
@@ -49,17 +54,95 @@ document.addEventListener('DOMContentLoaded', () => {
     function getPlacementPosition(targetElement, piece) { if (!targetElement || !piece) return null; const cell = targetElement.closest('.cell'); if (!cell) return null; let baseRow = parseInt(cell.dataset.row); let baseCol = parseInt(cell.dataset.col); const rowOffset = Math.floor(piece.shape.length / 2); const colOffset = Math.floor(piece.shape[0].length / 2); let finalRow = baseRow - rowOffset; let finalCol = baseCol - colOffset; if (finalCol < 0) finalCol = 0; if (finalRow < 0) finalRow = 0; if (finalCol + piece.shape[0].length > BOARD_SIZE) finalCol = BOARD_SIZE - piece.shape[0].length; if (finalRow + piece.shape.length > BOARD_SIZE) finalRow = BOARD_SIZE - piece.shape.length; return { row: finalRow, col: finalCol }; }
     function handleDrop(targetElement) { if (isAnimating || !draggedPiece) return; clearGhost(); const pos = getPlacementPosition(targetElement, draggedPiece); if (pos && placePiece(draggedPiece, pos.row, pos.col)) { const pieceIndex = currentPieces.findIndex(p => p && p.id === draggedPiece.id); if (pieceIndex > -1) currentPieces[pieceIndex] = null; if (currentPieces.every(p => p === null)) { generateNewPieces(); } updateBoard(); drawCurrentPieces(); processTurn(); } }
     function handleMove(targetElement) { if (isAnimating || !draggedPiece) return; const pos = getPlacementPosition(targetElement, draggedPiece); if (pos) { showGhost(draggedPiece, pos.row, pos.col); } else { clearGhost(); } }
+    
+    // --- Обработчики Drag & Drop (для мыши) ---
     piecesContainer.addEventListener('dragstart', (e) => { if (isAnimating || e.target.classList.contains('unplaceable')) { e.preventDefault(); return; } const pieceDiv = e.target.closest('.piece-preview'); if (!pieceDiv) return; const pieceId = parseFloat(pieceDiv.dataset.pieceId); draggedPiece = currentPieces.find(p => p && p.id === pieceId); e.dataTransfer.setData('text/plain', pieceId); e.dataTransfer.effectAllowed = 'move'; setTimeout(() => pieceDiv.classList.add('dragging'), 0); });
     piecesContainer.addEventListener('dragend', (e) => { if (isAnimating) return; e.target.classList.remove('dragging'); clearGhost(); draggedPiece = null; });
     boardElement.addEventListener('dragover', (e) => { e.preventDefault(); handleMove(e.target); });
     boardElement.addEventListener('dragleave', (e) => { if (!e.relatedTarget || !boardElement.contains(e.relatedTarget)) clearGhost(); });
     boardElement.addEventListener('drop', (e) => { e.preventDefault(); handleDrop(e.target); });
-    piecesContainer.addEventListener('touchstart', (e) => { const pieceDiv = e.target.closest('.piece-preview'); if (isAnimating || !pieceDiv || pieceDiv.classList.contains('unplaceable')) { return; } e.preventDefault(); const pieceId = parseFloat(pieceDiv.dataset.pieceId); draggedPiece = currentPieces.find(p => p && p.id === pieceId); if (!draggedPiece) return; touchClone = pieceDiv.cloneNode(true); touchClone.style.position = 'absolute'; touchClone.style.zIndex = '1000'; touchClone.style.pointerEvents = 'none'; document.body.appendChild(touchClone); const touch = e.touches[0]; touchClone.style.left = `${touch.clientX - touchClone.offsetWidth / 2}px`; touchClone.style.top = `${touch.clientY - touchClone.offsetHeight / 2 + TOUCH_OFFSET_Y}px`; pieceDiv.classList.add('dragging'); }, { passive: false });
-    document.body.addEventListener('touchmove', (e) => { if (isAnimating || !draggedPiece || !touchClone) return; e.preventDefault(); const touch = e.touches[0]; touchClone.style.left = `${touch.clientX - touchClone.offsetWidth / 2}px`; touchClone.style.top = `${touch.clientY - touchClone.offsetHeight / 2 + TOUCH_OFFSET_Y}px`; const elementUnderTouch = document.elementFromPoint(touch.clientX, touch.clientY + TOUCH_OFFSET_Y); handleMove(elementUnderTouch); }, { passive: false });
-    document.body.addEventListener('touchend', (e) => { if (isAnimating || !draggedPiece || !touchClone) return; const touch = e.changedTouches[0]; const elementUnderTouch = document.elementFromPoint(touch.clientX, touch.clientY + TOUCH_OFFSET_Y); handleDrop(elementUnderTouch); touchClone.remove(); touchClone = null; document.querySelector('.piece-preview.dragging')?.classList.remove('dragging'); draggedPiece = null; });
+
+    // --- НОВАЯ ФУНКЦИЯ ДЛЯ ОБНОВЛЕНИЯ В requestAnimationFrame ---
+    function performTouchUpdate() {
+        if (!touchUpdateScheduled) return;
+
+        // Обновляем позицию клона
+        if (touchClone) {
+             // Использование transform более производительно, чем left/top
+            touchClone.style.transform = `translate(${lastTouchX - touchClone.offsetWidth / 2}px, ${lastTouchY - touchClone.offsetHeight / 2 + TOUCH_OFFSET_Y}px)`;
+        }
+        
+        // Выполняем "тяжелую" логику
+        const elementUnderTouch = document.elementFromPoint(lastTouchX, lastTouchY + TOUCH_OFFSET_Y);
+        handleMove(elementUnderTouch);
+        
+        touchUpdateScheduled = false; // Сбрасываем флаг
+    }
+
+    // --- ОБРАБОТЧИКИ TOUCH-СОБЫТИЙ (ОПТИМИЗИРОВАННЫЕ) ---
+    piecesContainer.addEventListener('touchstart', (e) => {
+        const pieceDiv = e.target.closest('.piece-preview');
+        if (isAnimating || !pieceDiv || pieceDiv.classList.contains('unplaceable')) { return; }
+        
+        const pieceId = parseFloat(pieceDiv.dataset.pieceId);
+        draggedPiece = currentPieces.find(p => p && p.id === pieceId);
+        if (!draggedPiece) return;
+
+        // e.preventDefault() вызываем только если фигуру можно взять
+        e.preventDefault();
+
+        touchClone = pieceDiv.cloneNode(true);
+        touchClone.style.position = 'absolute';
+        touchClone.style.zIndex = '1000';
+        touchClone.style.pointerEvents = 'none';
+        touchClone.style.left = '0';
+        touchClone.style.top = '0';
+        
+        document.body.appendChild(touchClone);
+
+        const touch = e.touches[0];
+        lastTouchX = touch.clientX;
+        lastTouchY = touch.clientY;
+        
+        touchClone.style.transform = `translate(${lastTouchX - touchClone.offsetWidth / 2}px, ${lastTouchY - touchClone.offsetHeight / 2 + TOUCH_OFFSET_Y}px)`;
+        pieceDiv.classList.add('dragging');
+
+    }, { passive: false });
+
+    document.body.addEventListener('touchmove', (e) => {
+        if (!draggedPiece || !touchClone) return;
+        
+        e.preventDefault();
+        
+        const touch = e.touches[0];
+        lastTouchX = touch.clientX;
+        lastTouchY = touch.clientY;
+        
+        if (!touchUpdateScheduled) {
+            touchUpdateScheduled = true;
+            window.requestAnimationFrame(performTouchUpdate);
+        }
+    }, { passive: false });
+
+    document.body.addEventListener('touchend', (e) => {
+        if (!draggedPiece || !touchClone) return;
+
+        touchUpdateScheduled = false;
+
+        const touch = e.changedTouches[0];
+        const elementUnderTouch = document.elementFromPoint(touch.clientX, touch.clientY + TOUCH_OFFSET_Y);
+        handleDrop(elementUnderTouch);
+        
+        touchClone.remove();
+        touchClone = null;
+        document.querySelector('.piece-preview.dragging')?.classList.remove('dragging');
+        draggedPiece = null;
+    });
     
+    // --- Кнопки ---
     if (newGameBtn) { newGameBtn.addEventListener('click', () => { if (confirm("Вы уверены, что хотите начать новую игру? Текущий прогресс будет потерян.")) { deleteGameState(); initGame(true); } }); }
     if (restartFromGameOverBtn) { restartFromGameOverBtn.addEventListener('click', () => { gameOverScreen.classList.add('hidden'); initGame(true); }); }
 
+    // --- Запуск игры ---
     initGame();
 });
