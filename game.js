@@ -72,7 +72,7 @@ document.addEventListener('DOMContentLoaded', () => {
         touchUpdateScheduled = false;
     }
 
-    // --- ПОЛНОСТЬЮ ПЕРЕРАБОТАННЫЕ ОБРАБОТЧИКИ TOUCH ---
+    // --- ОБРАБОТЧИКИ TOUCH ---
     piecesContainer.addEventListener('touchstart', (e) => {
         const pieceDiv = e.target.closest('.piece-preview');
         if (isAnimating || !pieceDiv || pieceDiv.classList.contains('unplaceable')) return;
@@ -84,22 +84,22 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
 
         draggedPieceOriginalDiv = pieceDiv;
-        draggedPieceOriginalDiv.style.opacity = '0.3'; // Делаем оригинал полупрозрачным
+        draggedPieceOriginalDiv.style.opacity = '0.3';
 
         touchClone = pieceDiv.cloneNode(true);
-        touchClone.style.position = 'fixed'; // Fixed, чтобы не зависеть от прокрутки
+        touchClone.style.position = 'fixed';
         touchClone.style.pointerEvents = 'none';
         touchClone.style.zIndex = '1000';
-        touchClone.style.opacity = '1'; // Клон всегда полностью видим
+        touchClone.style.opacity = '1';
         
-        // Убираем классы, которые могут влиять на видимость
-        touchClone.classList.remove('unplaceable', 'dragging');
-
+        // --- КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ ---
+        // Отключаем CSS-анимацию для клона, чтобы он двигался мгновенно
+        touchClone.style.transition = 'none';
+        
         const touch = e.touches[0];
         lastTouchX = touch.clientX;
         lastTouchY = touch.clientY;
 
-        // Ставим клон сразу в нужную позицию
         touchClone.style.left = '0';
         touchClone.style.top = '0';
         touchClone.style.transform = `translate(${lastTouchX}px, ${lastTouchY}px) translate(-50%, -50%) translateY(${TOUCH_OFFSET_Y}px)`;
@@ -128,12 +128,10 @@ document.addEventListener('DOMContentLoaded', () => {
         
         handleDrop(elementUnderTouch);
         
-        // Восстанавливаем видимость оригинала
         if (draggedPieceOriginalDiv) {
             draggedPieceOriginalDiv.style.opacity = '1';
         }
 
-        // Удаляем клон и сбрасываем переменные
         touchClone.remove();
         touchClone = null;
         draggedPieceOriginalDiv = null;
