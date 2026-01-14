@@ -21,11 +21,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Переменные состояния ---
     let board = [], currentPieces = [], draggedPiece = null, isAnimating = false, touchClone = null, score = 0, highScore = 0;
     let tg = null;
-
-    // --- ПЕРЕМЕННЫЕ ДЛЯ ОПТИМИЗАЦИИ ---
+    
+    // --- ИЗМЕНЕНИЕ: Переменные для оптимизации и отслеживания ---
     let touchUpdateScheduled = false;
     let lastTouchX = 0;
     let lastTouchY = 0;
+    let draggedPieceOriginalDiv = null; // Запоминаем оригинальный div
 
     // --- Инициализация ---
     try { tg = window.Telegram.WebApp; tg.ready(); tg.expand(); } catch (e) { console.log("Не в среде Telegram."); }
@@ -46,7 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function isPiecePlaceable(piece) { if (!piece) return false; for (let r = 0; r <= BOARD_SIZE - piece.shape.length; r++) { for (let c = 0; c <= BOARD_SIZE - piece.shape[0].length; c++) { if (canPlace(piece, r, c)) return true; } } return false; }
     function updatePlaceableStatus() { document.querySelectorAll('.piece-preview').forEach(div => { if(!div.dataset.pieceId) return; const pieceId = parseFloat(div.dataset.pieceId); const pieceData = currentPieces.find(p => p && p.id === pieceId); const placeable = isPiecePlaceable(pieceData); div.classList.toggle('unplaceable', !placeable); div.draggable = placeable; }); }
     function checkGameOver() { return currentPieces.every(p => p === null || !isPiecePlaceable(p)); }
-    function handleGameOver() { isAnimating = false; finalScoreElement.textContent = score; gameOverScreen.classList.remove('hidden'); if (score > highScore) { highScore = score; localStorage.setItem(HIGH_SCORE_KEY, highScore); } deleteGameState(); console.log("Игра окончена. Счет:", score); }
+    function handleGameOver() { isAnimating = false; finalScoreElement.textContent = score; gameOverScreen.classList.remove('hidden'); if (score > highScore) { highScore = score; localStorage.setItem(HIGH_SCORE_KEY, highScore); } deleteGameState(); }
     function createSandEffect(cell) { const rect = cell.getBoundingClientRect(); const particleCount = 8; let colorClass = ''; for (const c of cell.classList) { if (c.startsWith('color-')) { colorClass = c; break; } } for (let i = 0; i < particleCount; i++) { const particle = document.createElement('div'); particle.classList.add('sand-particle', colorClass); particle.style.left = `${rect.left + rect.width / 2}px`; particle.style.top = `${rect.top + rect.height / 2}px`; document.body.appendChild(particle); const angle = Math.random() * Math.PI * 2, radius = Math.random() * 25, finalX = Math.cos(angle) * radius, finalY = Math.random() * 60 + 20, finalScale = 0.1, finalRotation = Math.random() * 360; requestAnimationFrame(() => { particle.style.transform = `translate(${finalX}px, ${finalY}px) scale(${finalScale}) rotate(${finalRotation}deg)`; particle.style.opacity = '0'; }); setTimeout(() => particle.remove(), 800); } }
     function processTurn() { if (isAnimating) return; const rowsToClear = new Set(), colsToClear = new Set(); for (let r = 0; r < BOARD_SIZE; r++) { if (board[r].every(cell => cell !== 0)) rowsToClear.add(r); } for (let c = 0; c < BOARD_SIZE; c++) { if (board.every(row => row[c] !== 0)) colsToClear.add(c); } const linesCleared = rowsToClear.size + colsToClear.size; if (linesCleared > 0) { const bonusPoints = (linesCleared * (linesCleared + 1) / 2) * 10; addScore(bonusPoints); isAnimating = true; const cellsToAnimate = new Set(); rowsToClear.forEach(r => { for (let c = 0; c < BOARD_SIZE; c++) cellsToAnimate.add(document.querySelector(`[data-row='${r}'][data-col='${c}']`)); }); colsToClear.forEach(c => { for (let r = 0; r < BOARD_SIZE; r++) cellsToAnimate.add(document.querySelector(`[data-row='${r}'][data-col='${c}']`)); }); cellsToAnimate.forEach(cell => { if (cell) { createSandEffect(cell); board[cell.dataset.row][cell.dataset.col] = 0; } }); updateBoard(); setTimeout(() => { updatePlaceableStatus(); if (checkGameOver()) handleGameOver(); isAnimating = false; }, 100); } else { updatePlaceableStatus(); if (checkGameOver()) handleGameOver(); } saveGameState(); }
     function clearGhost() { if (isAnimating) return; document.querySelectorAll('.cell').forEach(cell => cell.classList.remove('ghost', 'ghost-invalid')); }
@@ -62,24 +63,18 @@ document.addEventListener('DOMContentLoaded', () => {
     boardElement.addEventListener('dragleave', (e) => { if (!e.relatedTarget || !boardElement.contains(e.relatedTarget)) clearGhost(); });
     boardElement.addEventListener('drop', (e) => { e.preventDefault(); handleDrop(e.target); });
 
-    // --- НОВАЯ ФУНКЦИЯ ДЛЯ ОБНОВЛЕНИЯ В requestAnimationFrame ---
+    // --- Функция для обновления в requestAnimationFrame ---
     function performTouchUpdate() {
         if (!touchUpdateScheduled) return;
-
-        // Обновляем позицию клона
         if (touchClone) {
-             // Использование transform более производительно, чем left/top
             touchClone.style.transform = `translate(${lastTouchX - touchClone.offsetWidth / 2}px, ${lastTouchY - touchClone.offsetHeight / 2 + TOUCH_OFFSET_Y}px)`;
         }
-        
-        // Выполняем "тяжелую" логику
         const elementUnderTouch = document.elementFromPoint(lastTouchX, lastTouchY + TOUCH_OFFSET_Y);
         handleMove(elementUnderTouch);
-        
-        touchUpdateScheduled = false; // Сбрасываем флаг
+        touchUpdateScheduled = false;
     }
 
-    // --- ОБРАБОТЧИКИ TOUCH-СОБЫТИЙ (ОПТИМИЗИРОВАННЫЕ) ---
+    // --- Обработчики Touch-событий ---
     piecesContainer.addEventListener('touchstart', (e) => {
         const pieceDiv = e.target.closest('.piece-preview');
         if (isAnimating || !pieceDiv || pieceDiv.classList.contains('unplaceable')) { return; }
@@ -88,8 +83,11 @@ document.addEventListener('DOMContentLoaded', () => {
         draggedPiece = currentPieces.find(p => p && p.id === pieceId);
         if (!draggedPiece) return;
 
-        // e.preventDefault() вызываем только если фигуру можно взять
         e.preventDefault();
+
+        // --- ИЗМЕНЕНИЕ: Запоминаем и скрываем оригинал ---
+        draggedPieceOriginalDiv = pieceDiv;
+        draggedPieceOriginalDiv.style.display = 'none';
 
         touchClone = pieceDiv.cloneNode(true);
         touchClone.style.position = 'absolute';
@@ -97,7 +95,7 @@ document.addEventListener('DOMContentLoaded', () => {
         touchClone.style.pointerEvents = 'none';
         touchClone.style.left = '0';
         touchClone.style.top = '0';
-        
+        touchClone.style.display = 'block'; // Убедимся, что клон видим
         document.body.appendChild(touchClone);
 
         const touch = e.touches[0];
@@ -105,19 +103,14 @@ document.addEventListener('DOMContentLoaded', () => {
         lastTouchY = touch.clientY;
         
         touchClone.style.transform = `translate(${lastTouchX - touchClone.offsetWidth / 2}px, ${lastTouchY - touchClone.offsetHeight / 2 + TOUCH_OFFSET_Y}px)`;
-        pieceDiv.classList.add('dragging');
-
     }, { passive: false });
 
     document.body.addEventListener('touchmove', (e) => {
         if (!draggedPiece || !touchClone) return;
-        
         e.preventDefault();
-        
         const touch = e.touches[0];
         lastTouchX = touch.clientX;
         lastTouchY = touch.clientY;
-        
         if (!touchUpdateScheduled) {
             touchUpdateScheduled = true;
             window.requestAnimationFrame(performTouchUpdate);
@@ -128,14 +121,21 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!draggedPiece || !touchClone) return;
 
         touchUpdateScheduled = false;
-
         const touch = e.changedTouches[0];
         const elementUnderTouch = document.elementFromPoint(touch.clientX, touch.clientY + TOUCH_OFFSET_Y);
+        
+        // --- ИЗМЕНЕНИЕ: Возвращаем видимость оригиналу ---
+        if (draggedPieceOriginalDiv) {
+            draggedPieceOriginalDiv.style.display = ''; // Сбрасываем инлайн-стиль
+        }
+
         handleDrop(elementUnderTouch);
         
         touchClone.remove();
+
+        // Сбрасываем состояние
         touchClone = null;
-        document.querySelector('.piece-preview.dragging')?.classList.remove('dragging');
+        draggedPieceOriginalDiv = null;
         draggedPiece = null;
     });
     
