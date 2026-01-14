@@ -21,12 +21,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Переменные состояния ---
     let board = [], currentPieces = [], draggedPiece = null, isAnimating = false, touchClone = null, score = 0, highScore = 0;
     let tg = null;
-    
-    // --- ИЗМЕНЕНИЕ: Переменные для оптимизации и отслеживания ---
     let touchUpdateScheduled = false;
     let lastTouchX = 0;
     let lastTouchY = 0;
-    let draggedPieceOriginalDiv = null; // Запоминаем оригинальный div
+    let draggedPieceOriginalDiv = null;
 
     // --- Инициализация ---
     try { tg = window.Telegram.WebApp; tg.ready(); tg.expand(); } catch (e) { console.log("Не в среде Telegram."); }
@@ -57,27 +55,27 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleMove(targetElement) { if (isAnimating || !draggedPiece) return; const pos = getPlacementPosition(targetElement, draggedPiece); if (pos) { showGhost(draggedPiece, pos.row, pos.col); } else { clearGhost(); } }
     
     // --- Обработчики Drag & Drop (для мыши) ---
-    piecesContainer.addEventListener('dragstart', (e) => { if (isAnimating || e.target.classList.contains('unplaceable')) { e.preventDefault(); return; } const pieceDiv = e.target.closest('.piece-preview'); if (!pieceDiv) return; const pieceId = parseFloat(pieceDiv.dataset.pieceId); draggedPiece = currentPieces.find(p => p && p.id === pieceId); e.dataTransfer.setData('text/plain', pieceId); e.dataTransfer.effectAllowed = 'move'; setTimeout(() => pieceDiv.classList.add('dragging'), 0); });
-    piecesContainer.addEventListener('dragend', (e) => { if (isAnimating) return; e.target.classList.remove('dragging'); clearGhost(); draggedPiece = null; });
+    piecesContainer.addEventListener('dragstart', (e) => { if (isAnimating || e.target.classList.contains('unplaceable')) { e.preventDefault(); return; } const pieceDiv = e.target.closest('.piece-preview'); if (!pieceDiv) return; const pieceId = parseFloat(pieceDiv.dataset.pieceId); draggedPiece = currentPieces.find(p => p && p.id === pieceId); e.dataTransfer.setData('text/plain', pieceId); e.dataTransfer.effectAllowed = 'move'; setTimeout(() => pieceDiv.style.opacity = '0.3', 0); });
+    piecesContainer.addEventListener('dragend', (e) => { e.target.style.opacity = '1'; clearGhost(); draggedPiece = null; });
     boardElement.addEventListener('dragover', (e) => { e.preventDefault(); handleMove(e.target); });
     boardElement.addEventListener('dragleave', (e) => { if (!e.relatedTarget || !boardElement.contains(e.relatedTarget)) clearGhost(); });
     boardElement.addEventListener('drop', (e) => { e.preventDefault(); handleDrop(e.target); });
 
-    // --- Функция для обновления в requestAnimationFrame ---
+    // --- ФУНКЦИЯ ОБНОВЛЕНИЯ ДЛЯ TOUCH ---
     function performTouchUpdate() {
         if (!touchUpdateScheduled) return;
         if (touchClone) {
-            touchClone.style.transform = `translate(${lastTouchX - touchClone.offsetWidth / 2}px, ${lastTouchY - touchClone.offsetHeight / 2 + TOUCH_OFFSET_Y}px)`;
+            touchClone.style.transform = `translate(${lastTouchX}px, ${lastTouchY}px) translate(-50%, -50%) translateY(${TOUCH_OFFSET_Y}px)`;
         }
         const elementUnderTouch = document.elementFromPoint(lastTouchX, lastTouchY + TOUCH_OFFSET_Y);
         handleMove(elementUnderTouch);
         touchUpdateScheduled = false;
     }
 
-    // --- Обработчики Touch-событий ---
+    // --- ПОЛНОСТЬЮ ПЕРЕРАБОТАННЫЕ ОБРАБОТЧИКИ TOUCH ---
     piecesContainer.addEventListener('touchstart', (e) => {
         const pieceDiv = e.target.closest('.piece-preview');
-        if (isAnimating || !pieceDiv || pieceDiv.classList.contains('unplaceable')) { return; }
+        if (isAnimating || !pieceDiv || pieceDiv.classList.contains('unplaceable')) return;
         
         const pieceId = parseFloat(pieceDiv.dataset.pieceId);
         draggedPiece = currentPieces.find(p => p && p.id === pieceId);
@@ -85,24 +83,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
         e.preventDefault();
 
-        // --- ИЗМЕНЕНИЕ: Запоминаем и скрываем оригинал ---
         draggedPieceOriginalDiv = pieceDiv;
-        draggedPieceOriginalDiv.style.display = 'none';
+        draggedPieceOriginalDiv.style.opacity = '0.3'; // Делаем оригинал полупрозрачным
 
         touchClone = pieceDiv.cloneNode(true);
-        touchClone.style.position = 'absolute';
-        touchClone.style.zIndex = '1000';
+        touchClone.style.position = 'fixed'; // Fixed, чтобы не зависеть от прокрутки
         touchClone.style.pointerEvents = 'none';
-        touchClone.style.left = '0';
-        touchClone.style.top = '0';
-        touchClone.style.display = 'block'; // Убедимся, что клон видим
-        document.body.appendChild(touchClone);
+        touchClone.style.zIndex = '1000';
+        touchClone.style.opacity = '1'; // Клон всегда полностью видим
+        
+        // Убираем классы, которые могут влиять на видимость
+        touchClone.classList.remove('unplaceable', 'dragging');
 
         const touch = e.touches[0];
         lastTouchX = touch.clientX;
         lastTouchY = touch.clientY;
+
+        // Ставим клон сразу в нужную позицию
+        touchClone.style.left = '0';
+        touchClone.style.top = '0';
+        touchClone.style.transform = `translate(${lastTouchX}px, ${lastTouchY}px) translate(-50%, -50%) translateY(${TOUCH_OFFSET_Y}px)`;
         
-        touchClone.style.transform = `translate(${lastTouchX - touchClone.offsetWidth / 2}px, ${lastTouchY - touchClone.offsetHeight / 2 + TOUCH_OFFSET_Y}px)`;
+        document.body.appendChild(touchClone);
     }, { passive: false });
 
     document.body.addEventListener('touchmove', (e) => {
@@ -124,16 +126,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const touch = e.changedTouches[0];
         const elementUnderTouch = document.elementFromPoint(touch.clientX, touch.clientY + TOUCH_OFFSET_Y);
         
-        // --- ИЗМЕНЕНИЕ: Возвращаем видимость оригиналу ---
-        if (draggedPieceOriginalDiv) {
-            draggedPieceOriginalDiv.style.display = ''; // Сбрасываем инлайн-стиль
-        }
-
         handleDrop(elementUnderTouch);
         
-        touchClone.remove();
+        // Восстанавливаем видимость оригинала
+        if (draggedPieceOriginalDiv) {
+            draggedPieceOriginalDiv.style.opacity = '1';
+        }
 
-        // Сбрасываем состояние
+        // Удаляем клон и сбрасываем переменные
+        touchClone.remove();
         touchClone = null;
         draggedPieceOriginalDiv = null;
         draggedPiece = null;
