@@ -37,7 +37,61 @@ document.addEventListener('DOMContentLoaded', () => {
     function createBoard() { boardElement.innerHTML = ''; for (let r = 0; r < BOARD_SIZE; r++) { for (let c = 0; c < BOARD_SIZE; c++) { const cell = document.createElement('div'); cell.dataset.row = r; cell.dataset.col = c; boardElement.appendChild(cell); } } }
     function updateBoard() { for (let r = 0; r < BOARD_SIZE; r++) { for (let c = 0; c < BOARD_SIZE; c++) { const cell = boardElement.children[r * BOARD_SIZE + c]; const colorClass = board[r][c]; cell.className = 'cell'; if (colorClass) { cell.classList.add(colorClass); } } } }
     function drawCurrentPieces() { piecesContainer.innerHTML = ''; currentPieces.forEach(piece => { if (!piece) return; const pieceDiv = document.createElement('div'); pieceDiv.classList.add('piece-preview'); pieceDiv.dataset.pieceId = piece.id; pieceDiv.draggable = true; const grid = document.createElement('div'); grid.style.display = 'grid'; grid.style.gridTemplateColumns = `repeat(${piece.shape[0].length}, ${PREVIEW_BLOCK_SIZE}px)`; grid.style.pointerEvents = 'none'; for (let r = 0; r < piece.shape.length; r++) { for (let c = 0; c < piece.shape[r].length; c++) { const block = document.createElement('div'); block.classList.add('preview-block', 'cell'); if (piece.shape[r][c]) { block.classList.add(piece.color); } grid.appendChild(block); } } pieceDiv.appendChild(grid); piecesContainer.appendChild(pieceDiv); }); updatePlaceableStatus(); }
-    function generateNewPieces() { currentPieces = []; for (let i = 0; i < 3; i++) { currentPieces.push(generateRandomPiece()); } updatePlaceableStatus(); if (checkGameOver()) { handleGameOver(); } }
+
+    /**
+     * Shuffles an array in place using the Fisher-Yates (aka Knuth) Shuffle algorithm.
+     * @param {Array} array The array to shuffle.
+     * @returns {Array} The shuffled array.
+     */
+    function shuffleArray(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+    }
+
+    // --- ИЗМЕНЕННАЯ ФУНКЦИЯ ---
+    function generateNewPieces() {
+        currentPieces = [];
+
+        // 1. Получаем все доступные варианты форм и цветов
+        const shapeKeys = Object.keys(SHAPES);
+        const colors = [...PIECE_COLORS]; // Создаем копию, чтобы не изменять оригинал
+
+        // 2. Перемешиваем их, чтобы получить случайный, но не повторяющийся порядок
+        shuffleArray(shapeKeys);
+        shuffleArray(colors);
+
+        // 3. Создаем 3 уникальные фигуры
+        for (let i = 0; i < 3; i++) {
+            // Берем следующие уникальные элементы из перемешанных списков
+            const shapeKey = shapeKeys[i];
+            const color = colors[i];
+            
+            // Проверка на случай, если фигур или цветов будет меньше 3
+            if (!shapeKey || !color) {
+                console.error("Недостаточно уникальных форм или цветов для генерации 3 новых фигур.");
+                // В качестве запасного варианта используем старый метод
+                currentPieces.push(generateRandomPiece());
+                continue;
+            }
+
+            currentPieces.push({
+                id: Date.now() + Math.random(),
+                shape: SHAPES[shapeKey],
+                color: color,
+            });
+        }
+
+        // Эта часть остается без изменений
+        updatePlaceableStatus();
+        if (checkGameOver()) {
+            handleGameOver();
+        }
+    }
+
+    // Эта функция теперь используется только в качестве запасного варианта
     function generateRandomPiece() { const shapeKeys = Object.keys(SHAPES); const randomShapeKey = shapeKeys[Math.floor(Math.random() * shapeKeys.length)]; return { id: Date.now() + Math.random(), shape: SHAPES[randomShapeKey], color: PIECE_COLORS[Math.floor(Math.random() * PIECE_COLORS.length)], }; }
     function canPlace(piece, startRow, startCol) { if (!piece) return false; for (let r = 0; r < piece.shape.length; r++) { for (let c = 0; c < piece.shape[r].length; c++) { if (piece.shape[r][c]) { const boardRow = startRow + r; const boardCol = startCol + c; if (boardRow >= BOARD_SIZE || boardCol >= BOARD_SIZE || boardRow < 0 || boardCol < 0 || board[boardRow][boardCol]) { return false; } } } } return true; }
     function placePiece(piece, startRow, startCol) { if (!canPlace(piece, startRow, startCol)) return false; let blockCount = 0; for (let r = 0; r < piece.shape.length; r++) { for (let c = 0; c < piece.shape[r].length; c++) { if (piece.shape[r][c]) { board[startRow + r][startCol + c] = piece.color; blockCount++; } } } addScore(blockCount); return true; }
