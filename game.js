@@ -13,7 +13,31 @@ document.addEventListener('DOMContentLoaded', () => {
     const BOARD_SIZE = 8;
     const PIECE_COLORS = ['color-1', 'color-2', 'color-3', 'color-4', 'color-5'];
     const PREVIEW_BLOCK_SIZE = 28;
-    const SHAPES = { 'I5_hor': [[1, 1, 1, 1, 1]], 'I5_ver': [[1], [1], [1], [1], [1]], 'I3_hor': [[1, 1, 1]], 'I3_ver': [[1], [1], [1]], 'I2_hor': [[1, 1]], 'I2_ver': [[1], [1]], 'square3x3': [[1, 1, 1], [1, 1, 1], [1, 1, 1]], 'I4_hor': [[1, 1, 1, 1]], 'O': [[1, 1], [1, 1]], 'L': [[1, 0], [1, 0], [1, 1]], 'J': [[0, 1], [0, 1], [1, 1]], 'T': [[0, 1, 0], [1, 1, 1]], 'dot': [[1]], 'corner': [[1, 1], [1, 0]], 'U_shape': [[1, 0, 1], [1, 1, 1]] };
+    // --- ОБНОВЛЕННЫЙ СПИСОК ФИГУР ---
+    const SHAPES = {
+        'I5_hor': [[1, 1, 1, 1, 1]],
+        'I5_ver': [[1], [1], [1], [1], [1]],
+        'I3_hor': [[1, 1, 1]],
+        'I3_ver': [[1], [1], [1]],
+        'I2_hor': [[1, 1]],
+        'I2_ver': [[1], [1]],
+        'square3x3': [[1, 1, 1], [1, 1, 1], [1, 1, 1]],
+        'I4_hor': [[1, 1, 1, 1]],
+        'O': [[1, 1], [1, 1]],
+        'L': [[1, 0], [1, 0], [1, 1]],
+        'J': [[0, 1], [0, 1], [1, 1]],
+        'T': [[0, 1, 0], [1, 1, 1]],
+        'dot': [[1]],
+        'corner': [[1, 1], [1, 0]],
+        'U_shape': [[1, 0, 1], [1, 1, 1]],
+        // --- ВАШИ НОВЫЕ ФИГУРЫ ---
+        'Seven_shape': [[1, 1, 1], [0, 0, 1], [0, 0, 1]],
+        'S_shape': [[0, 1, 1], [1, 1, 0]],
+        'Stair_shape': [[0, 1], [1, 1]],
+        'I4_ver': [[1], [1], [1], [1]],
+        'Twisted_Z_shape': [[1, 0], [1, 1], [0, 1]],
+        'Gun_shape': [[1, 1, 1], [1, 0, 0]]
+    };
     const TOUCH_OFFSET_Y = -80;
     const HIGH_SCORE_KEY = 'blockPuzzleHighScore_v2';
     const ACTIVE_GAME_KEY = 'blockPuzzleActiveGame_v2';
@@ -38,11 +62,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateBoard() { for (let r = 0; r < BOARD_SIZE; r++) { for (let c = 0; c < BOARD_SIZE; c++) { const cell = boardElement.children[r * BOARD_SIZE + c]; const colorClass = board[r][c]; cell.className = 'cell'; if (colorClass) { cell.classList.add(colorClass); } } } }
     function drawCurrentPieces() { piecesContainer.innerHTML = ''; currentPieces.forEach(piece => { if (!piece) return; const pieceDiv = document.createElement('div'); pieceDiv.classList.add('piece-preview'); pieceDiv.dataset.pieceId = piece.id; pieceDiv.draggable = true; const grid = document.createElement('div'); grid.style.display = 'grid'; grid.style.gridTemplateColumns = `repeat(${piece.shape[0].length}, ${PREVIEW_BLOCK_SIZE}px)`; grid.style.pointerEvents = 'none'; for (let r = 0; r < piece.shape.length; r++) { for (let c = 0; c < piece.shape[r].length; c++) { const block = document.createElement('div'); block.classList.add('preview-block', 'cell'); if (piece.shape[r][c]) { block.classList.add(piece.color); } grid.appendChild(block); } } pieceDiv.appendChild(grid); piecesContainer.appendChild(pieceDiv); }); updatePlaceableStatus(); }
 
-    /**
-     * Shuffles an array in place using the Fisher-Yates (aka Knuth) Shuffle algorithm.
-     * @param {Array} array The array to shuffle.
-     * @returns {Array} The shuffled array.
-     */
     function shuffleArray(array) {
         for (let i = array.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
@@ -51,47 +70,27 @@ document.addEventListener('DOMContentLoaded', () => {
         return array;
     }
 
-    // --- ИЗМЕНЕННАЯ ФУНКЦИЯ ---
     function generateNewPieces() {
         currentPieces = [];
-
-        // 1. Получаем все доступные варианты форм и цветов
         const shapeKeys = Object.keys(SHAPES);
-        const colors = [...PIECE_COLORS]; // Создаем копию, чтобы не изменять оригинал
-
-        // 2. Перемешиваем их, чтобы получить случайный, но не повторяющийся порядок
+        const colors = [...PIECE_COLORS];
         shuffleArray(shapeKeys);
         shuffleArray(colors);
 
-        // 3. Создаем 3 уникальные фигуры
         for (let i = 0; i < 3; i++) {
-            // Берем следующие уникальные элементы из перемешанных списков
             const shapeKey = shapeKeys[i];
-            const color = colors[i];
-            
-            // Проверка на случай, если фигур или цветов будет меньше 3
+            const color = colors[i % colors.length]; // Используем % для избежания выхода за пределы, если цветов меньше
             if (!shapeKey || !color) {
-                console.error("Недостаточно уникальных форм или цветов для генерации 3 новых фигур.");
-                // В качестве запасного варианта используем старый метод
+                console.error("Недостаточно уникальных форм или цветов.");
                 currentPieces.push(generateRandomPiece());
                 continue;
             }
-
-            currentPieces.push({
-                id: Date.now() + Math.random(),
-                shape: SHAPES[shapeKey],
-                color: color,
-            });
+            currentPieces.push({ id: Date.now() + Math.random(), shape: SHAPES[shapeKey], color: color });
         }
-
-        // Эта часть остается без изменений
         updatePlaceableStatus();
-        if (checkGameOver()) {
-            handleGameOver();
-        }
+        if (checkGameOver()) { handleGameOver(); }
     }
 
-    // Эта функция теперь используется только в качестве запасного варианта
     function generateRandomPiece() { const shapeKeys = Object.keys(SHAPES); const randomShapeKey = shapeKeys[Math.floor(Math.random() * shapeKeys.length)]; return { id: Date.now() + Math.random(), shape: SHAPES[randomShapeKey], color: PIECE_COLORS[Math.floor(Math.random() * PIECE_COLORS.length)], }; }
     function canPlace(piece, startRow, startCol) { if (!piece) return false; for (let r = 0; r < piece.shape.length; r++) { for (let c = 0; c < piece.shape[r].length; c++) { if (piece.shape[r][c]) { const boardRow = startRow + r; const boardCol = startCol + c; if (boardRow >= BOARD_SIZE || boardCol >= BOARD_SIZE || boardRow < 0 || boardCol < 0 || board[boardRow][boardCol]) { return false; } } } } return true; }
     function placePiece(piece, startRow, startCol) { if (!canPlace(piece, startRow, startCol)) return false; let blockCount = 0; for (let r = 0; r < piece.shape.length; r++) { for (let c = 0; c < piece.shape[r].length; c++) { if (piece.shape[r][c]) { board[startRow + r][startCol + c] = piece.color; blockCount++; } } } addScore(blockCount); return true; }
@@ -107,57 +106,42 @@ document.addEventListener('DOMContentLoaded', () => {
     function getPlacementPosition(targetElement, piece) { if (!targetElement || !piece) return null; const cell = targetElement.closest('.cell'); if (!cell) return null; let baseRow = parseInt(cell.dataset.row); let baseCol = parseInt(cell.dataset.col); const rowOffset = Math.floor(piece.shape.length / 2); const colOffset = Math.floor(piece.shape[0].length / 2); let finalRow = baseRow - rowOffset; let finalCol = baseCol - colOffset; if (finalCol < 0) finalCol = 0; if (finalRow < 0) finalRow = 0; if (finalCol + piece.shape[0].length > BOARD_SIZE) finalCol = BOARD_SIZE - piece.shape[0].length; if (finalRow + piece.shape.length > BOARD_SIZE) finalRow = BOARD_SIZE - piece.shape.length; return { row: finalRow, col: finalCol }; }
     function handleDrop(targetElement) { if (isAnimating || !draggedPiece) return; clearGhost(); const pos = getPlacementPosition(targetElement, draggedPiece); if (pos && placePiece(draggedPiece, pos.row, pos.col)) { const pieceIndex = currentPieces.findIndex(p => p && p.id === draggedPiece.id); if (pieceIndex > -1) currentPieces[pieceIndex] = null; if (currentPieces.every(p => p === null)) { generateNewPieces(); } updateBoard(); drawCurrentPieces(); processTurn(); } }
     function handleMove(targetElement) { if (isAnimating || !draggedPiece) return; const pos = getPlacementPosition(targetElement, draggedPiece); if (pos) { showGhost(draggedPiece, pos.row, pos.col); } else { clearGhost(); } }
-    
-    // --- Обработчики Drag & Drop (для мыши) ---
+
     piecesContainer.addEventListener('dragstart', (e) => { if (isAnimating || e.target.classList.contains('unplaceable')) { e.preventDefault(); return; } const pieceDiv = e.target.closest('.piece-preview'); if (!pieceDiv) return; const pieceId = parseFloat(pieceDiv.dataset.pieceId); draggedPiece = currentPieces.find(p => p && p.id === pieceId); e.dataTransfer.setData('text/plain', pieceId); e.dataTransfer.effectAllowed = 'move'; setTimeout(() => pieceDiv.style.opacity = '0.3', 0); });
     piecesContainer.addEventListener('dragend', (e) => { e.target.style.opacity = '1'; clearGhost(); draggedPiece = null; });
     boardElement.addEventListener('dragover', (e) => { e.preventDefault(); handleMove(e.target); });
     boardElement.addEventListener('dragleave', (e) => { if (!e.relatedTarget || !boardElement.contains(e.relatedTarget)) clearGhost(); });
     boardElement.addEventListener('drop', (e) => { e.preventDefault(); handleDrop(e.target); });
 
-    // --- ФУНКЦИЯ ОБНОВЛЕНИЯ ДЛЯ TOUCH ---
     function performTouchUpdate() {
         if (!touchUpdateScheduled) return;
-        if (touchClone) {
-            touchClone.style.transform = `translate(${lastTouchX}px, ${lastTouchY}px) translate(-50%, -50%) translateY(${TOUCH_OFFSET_Y}px)`;
-        }
+        if (touchClone) { touchClone.style.transform = `translate(${lastTouchX}px, ${lastTouchY}px) translate(-50%, -50%) translateY(${TOUCH_OFFSET_Y}px)`; }
         const elementUnderTouch = document.elementFromPoint(lastTouchX, lastTouchY + TOUCH_OFFSET_Y);
         handleMove(elementUnderTouch);
         touchUpdateScheduled = false;
     }
 
-    // --- ОБРАБОТЧИКИ TOUCH ---
     piecesContainer.addEventListener('touchstart', (e) => {
         const pieceDiv = e.target.closest('.piece-preview');
         if (isAnimating || !pieceDiv || pieceDiv.classList.contains('unplaceable')) return;
-        
         const pieceId = parseFloat(pieceDiv.dataset.pieceId);
         draggedPiece = currentPieces.find(p => p && p.id === pieceId);
         if (!draggedPiece) return;
-
         e.preventDefault();
-
         draggedPieceOriginalDiv = pieceDiv;
         draggedPieceOriginalDiv.style.opacity = '0.3';
-
         touchClone = pieceDiv.cloneNode(true);
         touchClone.style.position = 'fixed';
         touchClone.style.pointerEvents = 'none';
         touchClone.style.zIndex = '1000';
         touchClone.style.opacity = '1';
-        
-        // --- КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ ---
-        // Отключаем CSS-анимацию для клона, чтобы он двигался мгновенно
         touchClone.style.transition = 'none';
-        
         const touch = e.touches[0];
         lastTouchX = touch.clientX;
         lastTouchY = touch.clientY;
-
         touchClone.style.left = '0';
         touchClone.style.top = '0';
         touchClone.style.transform = `translate(${lastTouchX}px, ${lastTouchY}px) translate(-50%, -50%) translateY(${TOUCH_OFFSET_Y}px)`;
-        
         document.body.appendChild(touchClone);
     }, { passive: false });
 
@@ -175,27 +159,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.body.addEventListener('touchend', (e) => {
         if (!draggedPiece || !touchClone) return;
-
         touchUpdateScheduled = false;
         const touch = e.changedTouches[0];
         const elementUnderTouch = document.elementFromPoint(touch.clientX, touch.clientY + TOUCH_OFFSET_Y);
-        
         handleDrop(elementUnderTouch);
-        
-        if (draggedPieceOriginalDiv) {
-            draggedPieceOriginalDiv.style.opacity = '1';
-        }
-
+        if (draggedPieceOriginalDiv) { draggedPieceOriginalDiv.style.opacity = '1'; }
         touchClone.remove();
         touchClone = null;
         draggedPieceOriginalDiv = null;
         draggedPiece = null;
     });
-    
-    // --- Кнопки ---
+
     if (newGameBtn) { newGameBtn.addEventListener('click', () => { if (confirm("Вы уверены, что хотите начать новую игру? Текущий прогресс будет потерян.")) { deleteGameState(); initGame(true); } }); }
     if (restartFromGameOverBtn) { restartFromGameOverBtn.addEventListener('click', () => { gameOverScreen.classList.add('hidden'); initGame(true); }); }
 
-    // --- Запуск игры ---
     initGame();
 });
